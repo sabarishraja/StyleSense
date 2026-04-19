@@ -1,0 +1,6 @@
+{
+  "name": "classify-item",
+  "version": "1.0.0",
+  "description": "Classifies clothing items using Claude Sonnet 4.6 vision",
+  "verify_jwt": false
+}
