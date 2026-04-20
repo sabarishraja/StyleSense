@@ -8,10 +8,13 @@ import type {
   Category,
 } from "@/types";
 
+export type SortOrder = "newest" | "oldest";
+
 interface ClosetState {
   items: ClothingItem[];
   loading: boolean;
   filter: FilterKey;
+  sortOrder: SortOrder;
   error: string | null;
 
   // Data operations
@@ -24,9 +27,11 @@ interface ClosetState {
     userId: string
   ) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
+  deleteAllItems: () => Promise<void>;
 
-  // Filter
+  // Filter & Sort
   setFilter: (filter: FilterKey) => void;
+  setSortOrder: (order: SortOrder) => void;
   getFilteredItems: () => ClothingItem[];
 
   // Upload + classify flow
@@ -48,16 +53,31 @@ function categoryMatchesFilter(
   filter: FilterKey
 ): boolean {
   if (filter === null) return true;
-  if (filter === "ethnic") return category.startsWith("ethnic_");
+  
+  // Normalize the category string to handle cases where AI might return "Tops", "Outerwears", etc.
+  const normalizedCategory = String(category).toLowerCase().trim();
+  
+  if (filter === "ethnic") return normalizedCategory.startsWith("ethnic_");
+  
   // "top" filter includes outerwear so pullovers/quarter-zips show up
-  if (filter === "top") return category === "top" || category === "outerwear";
-  return category === filter;
+  // Allow strict matching plus common pluralizations from the AI
+  if (filter === "top") {
+    return (
+      normalizedCategory === "top" || 
+      normalizedCategory === "tops" || 
+      normalizedCategory === "outerwear" ||
+      normalizedCategory === "outerwears"
+    );
+  }
+  
+  return normalizedCategory === filter || normalizedCategory === filter + "s";
 }
 
 export const useClosetStore = create<ClosetState>((set, get) => ({
   items: [],
   loading: false,
   filter: null,
+  sortOrder: "newest",
   error: null,
 
   fetchItems: async () => {
@@ -70,10 +90,21 @@ export const useClosetStore = create<ClosetState>((set, get) => ({
 
       if (error) throw error;
 
-      // Generate signed URLs for all items
+      // Filter out any purely invalid rows without crashing.
+      const validRows = (data || []).filter(item => item && item.id);
+
+      // We handle missing image storage gracefully without throwing.
       const itemsWithUrls = await Promise.all(
-        (data || []).map(async (item: any) => {
-          const imageUrl = await getSignedUrl(item.storage_path);
+        validRows.map(async (item: any) => {
+          let imageUrl = null;
+          if (item.storage_path) {
+            try {
+              imageUrl = await getSignedUrl(item.storage_path);
+            } catch (e) {
+              console.warn(`Failed to get signed URL for item ${item.id}`, e);
+            }
+          }
+          
           return {
             ...item,
             secondary_colors: item.secondary_colors || [],
@@ -194,12 +225,53 @@ export const useClosetStore = create<ClosetState>((set, get) => ({
     }
   },
 
+  deleteAllItems: async () => {
+    set({ loading: true, error: null });
+    try {
+      const currentItems = get().items;
+      if (currentItems.length === 0) return;
+
+      const paths = currentItems.map((i) => i.storage_path).filter(Boolean);
+      const ids = currentItems.map((i) => i.id);
+
+      const { error: dbError } = await supabase
+        .from("clothing_items")
+        .delete()
+        .in("id", ids);
+
+      if (dbError) throw dbError;
+
+      if (paths.length > 0) {
+        await supabase.storage.from("clothing").remove(paths);
+      }
+
+      set({ items: [] });
+    } catch (err: any) {
+      set({ error: err.message || "Failed to delete all items" });
+      throw err;
+    } finally {
+      set({ loading: false });
+    }
+  },
+
   setFilter: (filter: FilterKey) => set({ filter }),
 
+  setSortOrder: (sortOrder: SortOrder) => set({ sortOrder }),
+
   getFilteredItems: () => {
-    const { items, filter } = get();
-    if (filter === null) return items;
-    return items.filter((item) => categoryMatchesFilter(item.category, filter));
+    const { items, filter, sortOrder } = get();
+    
+    let result = items;
+    if (filter !== null) {
+      result = items.filter((item) => categoryMatchesFilter(item.category, filter));
+    }
+
+    // Return a sorted copy to avoid mutating the original array
+    return [...result].sort((a, b) => {
+      const timeA = new Date(a.created_at).getTime();
+      const timeB = new Date(b.created_at).getTime();
+      return sortOrder === "newest" ? timeB - timeA : timeA - timeB;
+    });
   },
 
   clearError: () => set({ error: null }),

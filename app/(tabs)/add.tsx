@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   View, Text, Pressable, Image, ActivityIndicator,
-  Alert, StyleSheet, Animated, ScrollView, TextInput,
+  Alert, StyleSheet, Animated, ScrollView, TextInput, Dimensions
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,13 +12,14 @@ import { useAuthStore } from "@/store/auth";
 import { CATEGORIES, CATEGORY_LABELS } from "@/types";
 import type { ClothingClassification, Category, Season } from "@/types";
 
-const ACCENT = "#D4A574";
-const BG = "#0A0A0A";
-const SURFACE = "#161616";
+const ACCENT = "#C9A96E";
+const BG = "#000000";
+const SURFACE = "#1C1C1C";
 const BORDER = "#242424";
-const TEXT = "#F0F0F0";
+const TEXT = "#FFFFFF";
 const TEXT_DIM = "#888888";
 const TEXT_MUTED = "#505050";
+const BTN_ACCENT = "#D4A574";
 
 type Phase = "capture" | "analyzing" | "form" | "saving";
 
@@ -55,6 +56,7 @@ function ScanOverlay() {
 
 export default function AddItemScreen() {
   const insets = useSafeAreaInsets();
+  const { width } = Dimensions.get("window");
   const [phase, setPhase] = useState<Phase>("capture");
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [mimeType, setMimeType] = useState("image/jpeg");
@@ -71,9 +73,14 @@ export default function AddItemScreen() {
   const { uploadAndClassify, addItem } = useClosetStore();
   const { user } = useAuthStore();
 
+  // Re-entry guard: setState is async, so `disabled={saving}` alone can't block
+  // a double-tap in the ~16ms before React re-renders. This ref blocks it immediately.
+  const savingRef = useRef(false);
+
   const reset = () => {
     setPhase("capture"); setImageUri(null); setStoragePath(null);
     setClassification(null); setError(null); setTagInput("");
+    savingRef.current = false;
   };
 
   const pickImage = async (useCamera: boolean) => {
@@ -122,7 +129,9 @@ export default function AddItemScreen() {
   };
 
   const handleSave = async () => {
+    if (savingRef.current) return;
     if (!imageUri || !storagePath || !classification || !user) return;
+    savingRef.current = true;
     setPhase("saving");
     try {
       await addItem(imageUri, mimeType, {
@@ -134,69 +143,60 @@ export default function AddItemScreen() {
     } catch (err: any) {
       setError(err.message || "Failed to save");
       setPhase("form");
+      savingRef.current = false;
     }
   };
 
   // ── CAPTURE ──────────────────────────────────────────────────
   if (phase === "capture") {
     return (
-      <View style={[s.flex, { paddingTop: insets.top }]}>
-        <View style={s.header}>
-          <Pressable onPress={() => router.back()} style={s.iconBtn}>
-            <Ionicons name="close" size={18} color={TEXT_DIM} />
-          </Pressable>
-          <Text style={s.headerLabel}>New Item</Text>
-          <View style={{ width: 34 }} />
+      <View style={[s.flex, s.captureContainer, { paddingTop: insets.top, paddingBottom: insets.bottom + 20 }]}>
+        
+        {/* Top Spacer / Error */}
+        <View style={s.captureTop}>
+          {error && (
+            <Pressable onPress={() => setError(null)} style={s.errorBanner}>
+              <Text style={s.errorText}>{error}</Text>
+            </Pressable>
+          )}
         </View>
 
-        {error && (
-          <Pressable onPress={() => setError(null)} style={s.errorBanner}>
-            <Text style={s.errorText}>{error}</Text>
-          </Pressable>
-        )}
-
-        {/* Viewfinder — fills remaining space */}
-        <Pressable
-          onPress={() => pickImage(true)}
-          style={({ pressed }) => [s.viewfinder, { opacity: pressed ? 0.85 : 1 }]}
-        >
-          {[
-            { top: 14, left: 14, borderTopWidth: 2, borderLeftWidth: 2 },
-            { top: 14, right: 14, borderTopWidth: 2, borderRightWidth: 2 },
-            { bottom: 14, left: 14, borderBottomWidth: 2, borderLeftWidth: 2 },
-            { bottom: 14, right: 14, borderBottomWidth: 2, borderRightWidth: 2 },
-          ].map((style, i) => <View key={i} style={[s.bracket, style]} />)}
-          <View style={s.viewfinderCenter}>
-            <View style={s.cameraRing}>
-              <Ionicons name="camera" size={26} color={ACCENT} />
-            </View>
-            <Text style={s.viewfinderHint}>Tap to capture</Text>
-          </View>
-        </Pressable>
-
-        {/* Text */}
-        <View style={s.captureText}>
-          <Text style={s.captureTitle}>Show Claude the garment.</Text>
-          <Text style={s.captureSub}>Plain background · good light · one piece</Text>
-        </View>
-
-        {/* Buttons */}
-        <View style={[s.captureActions, { paddingBottom: insets.bottom + 20 }]}>
+        {/* Center Content: Viewfinder and Text blocks */}
+        <View style={s.captureCenter}>
           <Pressable
             onPress={() => pickImage(true)}
-            style={({ pressed }) => [s.primaryBtn, { transform: [{ scale: pressed ? 0.97 : 1 }] }]}
+            style={({ pressed }) => [
+              s.viewfinder, 
+              { width: width * 0.58 }, // roughly 58% of screen width
+              { opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }
+            ]}
           >
-            <Ionicons name="camera-outline" size={17} color={BG} />
-            <Text style={s.primaryBtnText}>Take Photo</Text>
+            {/* 4 Corner Brackets using Gold Accent */}
+            <View style={[s.bracket, s.bracketTL]} />
+            <View style={[s.bracket, s.bracketTR]} />
+            <View style={[s.bracket, s.bracketBL]} />
+            <View style={[s.bracket, s.bracketBR]} />
+            
+            <Ionicons name="add" size={48} color={ACCENT} />
           </Pressable>
+
+          <View style={s.textBlock}>
+            <Text style={s.stepLabel}>STEP 01 · CAPTURE</Text>
+            <Text style={s.captureTitle}>Show Claude{"\n"}the garment.</Text>
+            <Text style={s.captureSub}>Plain background, good light.{"\n"}One piece at a time.</Text>
+          </View>
+        </View>
+
+        {/* Bottom Left Action */}
+        <View style={s.captureBottom}>
           <Pressable
             onPress={() => pickImage(false)}
-            style={({ pressed }) => [s.ghostRow, { opacity: pressed ? 0.6 : 1 }]}
+            style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }, s.libraryBtn]}
           >
-            <Ionicons name="images-outline" size={16} color={TEXT_DIM} />
-            <Text style={s.ghostRowText}>Choose from Library</Text>
+            <Text style={s.libraryText}>Choose from Library</Text>
           </Pressable>
         </View>
+        
       </View>
     );
   }
@@ -356,11 +356,11 @@ export default function AddItemScreen() {
             ]}
           >
             {saving ? (
-              <ActivityIndicator color={BG} size="small" />
+              <ActivityIndicator color="#0A0A0A" size="small" />
             ) : (
               <>
                 <Text style={s.primaryBtnText}>Save to Closet</Text>
-                <Ionicons name="arrow-forward" size={16} color={BG} />
+                <Ionicons name="arrow-forward" size={16} color="#0A0A0A" />
               </>
             )}
           </Pressable>
@@ -372,64 +372,94 @@ export default function AddItemScreen() {
 
 const s = StyleSheet.create({
   flex: { flex: 1, backgroundColor: BG },
+  
+  // -- Capture View Overhauls --
+  captureContainer: { 
+    justifyContent: "space-between", // Stretches top, center, and bottom evenly
+  },
+  captureTop: {
+    height: 40,
+    justifyContent: "center",
+  },
+  captureCenter: {
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1, // Let center block take maximum remaining space
+  },
+  captureBottom: {
+    paddingHorizontal: 24,
+    paddingTop: 10,
+    alignItems: "flex-start",
+  },
+  
+  // Viewfinder Square
+  viewfinder: {
+    aspectRatio: 1,
+    backgroundColor: SURFACE,
+    borderRadius: 20,
+    alignItems: "center", 
+    justifyContent: "center",
+    marginBottom: 40,
+    // Soft inner shadow or pure solid block as requested matching editorial style
+    overflow: "hidden",
+  },
+  // L-Shaped Brackets using absolute positioning
+  bracket: { position: "absolute", width: 24, height: 24, borderColor: ACCENT },
+  bracketTL: { top: 16, left: 16, borderTopWidth: 2, borderLeftWidth: 2 },
+  bracketTR: { top: 16, right: 16, borderTopWidth: 2, borderRightWidth: 2 },
+  bracketBL: { bottom: 16, left: 16, borderBottomWidth: 2, borderLeftWidth: 2 },
+  bracketBR: { bottom: 16, right: 16, borderBottomWidth: 2, borderRightWidth: 2 },
 
-  header: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 20, paddingTop: 12, paddingBottom: 12,
+  // Text Typography
+  textBlock: {
+    alignItems: "center",
+    paddingHorizontal: 24,
   },
-  iconBtn: {
-    width: 34, height: 34, borderRadius: 10,
-    backgroundColor: SURFACE, borderWidth: 1, borderColor: BORDER,
-    alignItems: "center", justifyContent: "center",
+  stepLabel: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 11,
+    letterSpacing: 2,
+    color: ACCENT,
+    marginBottom: 16,
   },
-  headerLabel: {
-    fontFamily: "JetBrainsMono_400Regular",
-    fontSize: 10, letterSpacing: 2.5, color: TEXT_MUTED, textTransform: "uppercase",
+  captureTitle: {
+    fontFamily: "Fraunces_400Regular",
+    fontSize: 34,
+    color: TEXT,
+    letterSpacing: -0.5,
+    marginBottom: 16,
+    textAlign: "center",
+    lineHeight: 38,
   },
+  captureSub: { 
+    fontFamily: "Inter_400Regular", 
+    fontSize: 14, 
+    color: TEXT_DIM,
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  libraryBtn: {
+    paddingVertical: 10,
+  },
+  libraryText: { 
+    fontFamily: "Inter_500Medium", 
+    fontSize: 15, 
+    color: TEXT 
+  },
+
   errorBanner: {
-    marginHorizontal: 20, marginBottom: 8, padding: 12,
+    marginHorizontal: 20, padding: 12,
     backgroundColor: "rgba(239,83,80,0.08)", borderWidth: 1,
     borderColor: "rgba(239,83,80,0.25)", borderRadius: 12,
   },
   errorText: { fontFamily: "Inter_400Regular", fontSize: 13, color: "#EF5350", textAlign: "center" },
 
-  // Viewfinder
-  viewfinder: {
-    flex: 1,
-    marginHorizontal: 20, marginBottom: 0,
-    borderRadius: 24, backgroundColor: SURFACE,
-    borderWidth: 1, borderColor: BORDER,
-    alignItems: "center", justifyContent: "center",
-  },
-  bracket: { position: "absolute", width: 20, height: 20, borderColor: ACCENT },
-  viewfinderCenter: { alignItems: "center", gap: 10 },
-  cameraRing: {
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: "rgba(212,165,116,0.1)",
-    borderWidth: 1, borderColor: "rgba(212,165,116,0.25)",
-    alignItems: "center", justifyContent: "center",
-  },
-  viewfinderHint: {
-    fontFamily: "JetBrainsMono_400Regular",
-    fontSize: 9, letterSpacing: 1.8, color: TEXT_MUTED, textTransform: "uppercase",
-  },
-
-  captureText: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 2 },
-  captureTitle: {
-    fontFamily: "Fraunces_400Regular",
-    fontSize: 22, color: TEXT, letterSpacing: -0.5, marginBottom: 4,
-  },
-  captureSub: { fontFamily: "Inter_400Regular", fontSize: 12, color: TEXT_MUTED },
-  captureActions: { paddingHorizontal: 20, paddingTop: 14, gap: 0 },
+  // Button 
   primaryBtn: {
-    height: 54, borderRadius: 27, backgroundColor: ACCENT,
+    height: 54, borderRadius: 27, backgroundColor: BTN_ACCENT,
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
   },
-  primaryBtnText: { fontFamily: "Inter_600SemiBold", fontSize: 15, color: BG, letterSpacing: -0.1 },
-  ghostRow: {
-    height: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
-  },
-  ghostRowText: { fontFamily: "Inter_400Regular", fontSize: 14, color: TEXT_DIM },
+  primaryBtnText: { fontFamily: "Inter_600SemiBold", fontSize: 16, color: "#0A0A0A", letterSpacing: -0.1 },
 
   // Photo
   photoWrap: {
@@ -448,7 +478,7 @@ const s = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 5,
     paddingHorizontal: 11, paddingVertical: 6,
     backgroundColor: "rgba(0,0,0,0.7)",
-    borderRadius: 20, borderWidth: 1, borderColor: "rgba(212,165,116,0.3)",
+    borderRadius: 20, borderWidth: 1, borderColor: "rgba(201,169,110,0.3)", // matched to ACCENT hue
   },
   detectedStar: { color: ACCENT, fontSize: 9 },
   detectedLabel: { fontFamily: "Inter_500Medium", fontSize: 11, color: TEXT },
@@ -492,7 +522,7 @@ const s = StyleSheet.create({
   rowValue: { fontFamily: "Inter_400Regular", fontSize: 14, color: TEXT_DIM },
   colorSwatch: { width: 20, height: 20, borderRadius: 6, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
   fDot: { width: 19, height: 19, borderRadius: 10, borderWidth: 1.5, borderColor: BORDER },
-  fDotOn: { backgroundColor: ACCENT, borderColor: ACCENT },
+  fDotOn: { backgroundColor: BTN_ACCENT, borderColor: BTN_ACCENT }, // matched to BTN_ACCENT for form interactables
 
   nameInput: {
     fontFamily: "Fraunces_400Regular",
@@ -504,9 +534,9 @@ const s = StyleSheet.create({
     paddingHorizontal: 13, paddingVertical: 6,
     borderRadius: 20, borderWidth: 1, borderColor: BORDER, backgroundColor: SURFACE,
   },
-  chipOn: { backgroundColor: ACCENT, borderColor: ACCENT },
+  chipOn: { backgroundColor: BTN_ACCENT, borderColor: BTN_ACCENT },
   chipText: { fontFamily: "Inter_500Medium", fontSize: 12, color: TEXT_DIM },
-  chipTextOn: { color: BG },
+  chipTextOn: { color: "#000" },
 
   monoLabel: {
     fontFamily: "JetBrainsMono_400Regular",
@@ -531,7 +561,7 @@ const s = StyleSheet.create({
     backgroundColor: SURFACE, borderWidth: 1, borderColor: BORDER,
     borderRadius: 12, alignItems: "center", justifyContent: "center",
   },
-  tagAddText: { fontFamily: "Inter_600SemiBold", fontSize: 13, color: ACCENT },
+  tagAddText: { fontFamily: "Inter_600SemiBold", fontSize: 13, color: BTN_ACCENT },
 
   footer: {
     backgroundColor: BG,

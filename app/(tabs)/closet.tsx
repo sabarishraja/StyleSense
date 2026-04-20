@@ -1,30 +1,122 @@
-import React, { useCallback } from "react";
-import { View, Text, FlatList, RefreshControl, Pressable, StyleSheet } from "react-native";
+import React, { useCallback, useMemo } from "react";
+import { View, Text, FlatList, RefreshControl, Pressable, StyleSheet, Alert } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useClosetStore } from "@/store/closet";
 import ItemCard from "@/components/ItemCard";
 import CategoryFilter from "@/components/CategoryFilter";
 import type { ClothingItem } from "@/types";
 
-function ClosetHeader({ totalCount, filteredCount, filter }: { totalCount: number; filteredCount: number; filter: string | null }) {
+import { Ionicons } from "@expo/vector-icons";
+import type { SortOrder } from "@/store/closet";
+
+function ClosetHeader({
+  sortOrder,
+  setSortOrder,
+  itemCount,
+  onDeleteAll,
+}: {
+  sortOrder: SortOrder;
+  setSortOrder: (s: SortOrder) => void;
+  itemCount: number;
+  onDeleteAll: () => void;
+}) {
   const today = new Date();
   const dateStr = today.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+
+  const toggleSort = () => {
+    setSortOrder(sortOrder === "newest" ? "oldest" : "newest");
+  };
+
   return (
     <View style={s.header}>
-      <Text style={s.headerLabel}>The Closet</Text>
-      <Text style={s.headerTitle}>Wardrobe</Text>
-      <Text style={s.headerDate}>{dateStr}</Text>
+      <View>
+        <Text style={s.headerLabel}>The Closet</Text>
+        <Text style={s.headerTitle}>Wardrobe</Text>
+        <Text style={s.headerDate}>{dateStr}</Text>
+      </View>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <Pressable onPress={toggleSort} style={s.sortBtn}>
+          <Ionicons name="swap-vertical" size={16} color="#AAAAAA" />
+          <Text style={s.sortBtnText}>{sortOrder === "newest" ? "Latest" : "Oldest"}</Text>
+        </Pressable>
+        {itemCount > 0 && (
+          <Pressable onPress={onDeleteAll} style={s.deleteAllBtn} hitSlop={8}>
+            <Ionicons name="trash-outline" size={16} color="#EF5350" />
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 }
 
 export default function ClosetScreen() {
-  const { items, loading, filter, fetchItems, setFilter, getFilteredItems, error } = useClosetStore();
+  const { items, loading, filter, sortOrder, fetchItems, setFilter, setSortOrder, deleteAllItems, deleteItem, error } = useClosetStore();
   useFocusEffect(useCallback(() => { fetchItems(); }, []));
-  const filteredItems = getFilteredItems();
+
+  const handleDeleteAll = () => {
+    Alert.alert(
+      "Delete entire closet?",
+      `This will permanently delete all ${items.length} item${items.length === 1 ? "" : "s"} and their photos. This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete All",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteAllItems();
+            } catch (err: any) {
+              Alert.alert("Error", err.message || "Failed to delete items");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Compute filtered items directly from state to avoid stale closure issues
+  const filteredItems = useMemo(() => {
+    let result = items;
+    if (filter !== null) {
+      result = items.filter((item) => {
+        const normalizedCategory = String(item.category).toLowerCase().trim();
+        if (filter === "ethnic") return normalizedCategory.startsWith("ethnic_");
+        if (filter === "top") {
+          return (
+            normalizedCategory === "top" ||
+            normalizedCategory === "tops" ||
+            normalizedCategory === "outerwear" ||
+            normalizedCategory === "outerwears"
+          );
+        }
+        return normalizedCategory === filter || normalizedCategory === filter + "s";
+      });
+    }
+    return [...result].sort((a, b) => {
+      const timeA = new Date(a.created_at).getTime();
+      const timeB = new Date(b.created_at).getTime();
+      return sortOrder === "newest" ? timeB - timeA : timeA - timeB;
+    });
+  }, [items, filter, sortOrder]);
+
+  const handleDeleteItem = (item: ClothingItem) => {
+    const label = item.subcategory || item.category;
+    Alert.alert(
+      "Delete item?",
+      `Remove "${label}" from your closet? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => deleteItem(item.id),
+        },
+      ]
+    );
+  };
 
   const renderItem = ({ item }: { item: ClothingItem }) => (
-    <ItemCard item={item} onPress={() => {}} />
+    <ItemCard item={item} onPress={() => {}} onDelete={handleDeleteItem} />
   );
 
   const renderEmpty = () => (
@@ -56,14 +148,16 @@ export default function ClosetScreen() {
       <FlatList
         data={filteredItems}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => item.id ? `${item.id}-${index}` : `fallback-${index}`}
         numColumns={2}
+        columnWrapperStyle={{ justifyContent: 'space-between' }}
         ListHeaderComponent={
           <View>
             <ClosetHeader
-              totalCount={items.length}
-              filteredCount={filteredItems.length}
-              filter={filter}
+              sortOrder={sortOrder}
+              setSortOrder={setSortOrder}
+              itemCount={items.length}
+              onDeleteAll={handleDeleteAll}
             />
             {items.length > 0 && (
               <CategoryFilter activeFilter={filter} onFilterChange={setFilter} />
@@ -80,7 +174,7 @@ export default function ClosetScreen() {
         }
         contentContainerStyle={{
           paddingHorizontal: 10,
-          paddingBottom: 24,
+          paddingBottom: 110,
           flexGrow: filteredItems.length === 0 ? 1 : undefined,
         }}
         ListEmptyComponent={renderEmpty}
@@ -100,7 +194,10 @@ export default function ClosetScreen() {
 
 const s = StyleSheet.create({
   flex: { flex: 1, backgroundColor: "#0A0A0A" },
-  header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16 },
+  header: { 
+    paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16,
+    flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end"
+  },
   headerLabel: {
     fontFamily: "JetBrainsMono_400Regular",
     fontSize: 10, letterSpacing: 1.5,
@@ -114,6 +211,24 @@ const s = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     fontSize: 12, color: "#AAAAAA", marginTop: 4, letterSpacing: -0.05,
   },
+  sortBtn: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1, borderColor: "#2A2A2A"
+  },
+  sortBtnText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 12, color: "#AAAAAA"
+  },
+  deleteAllBtn: {
+    width: 34, height: 34, borderRadius: 8,
+    borderWidth: 1, borderColor: "rgba(239,83,80,0.35)",
+    backgroundColor: "rgba(239,83,80,0.08)",
+    alignItems: "center", justifyContent: "center",
+  },
+
   countStrip: {
     paddingHorizontal: 6,
     paddingBottom: 10,
