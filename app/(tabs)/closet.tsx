@@ -116,7 +116,7 @@ export default function ClosetScreen() {
   };
 
   const renderItem = ({ item }: { item: ClothingItem }) => (
-    <ItemCard item={item} onPress={() => {}} onDelete={handleDeleteItem} />
+    <ItemCard item={item} onPress={() => router.push(`/item/${item.id}`)} onDelete={handleDeleteItem} />
   );
 
   const renderEmpty = () => (

@@ -177,7 +177,12 @@ export default function AddItemScreen() {
             <View style={[s.bracket, s.bracketBL]} />
             <View style={[s.bracket, s.bracketBR]} />
             
-            <Ionicons name="add" size={48} color={ACCENT} />
+            <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="camera-outline" size={56} color={ACCENT} />
+              <View style={{ position: 'absolute', bottom: -5, right: -5, backgroundColor: SURFACE, borderRadius: 14 }}>
+                <Ionicons name="add-circle" size={28} color={ACCENT} />
+              </View>
+            </View>
           </Pressable>
 
           <View style={s.textBlock}>
@@ -346,21 +351,22 @@ export default function AddItemScreen() {
 
       {/* Save CTA — always visible at bottom */}
       {!analyzing && classification && (
-        <View style={[s.footer, { paddingBottom: insets.bottom + 12 }]}>
+        <View style={[{ paddingHorizontal: 20, paddingVertical: 14, paddingBottom: insets.bottom || 20, backgroundColor: '#000', borderTopWidth: 1, borderTopColor: '#242424' }]}>
           <Pressable
             onPress={handleSave}
             disabled={saving}
             style={({ pressed }) => [
-              s.primaryBtn,
-              { opacity: pressed || saving ? 0.85 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] },
+              { height: 56, borderRadius: 16, backgroundColor: "transparent", borderWidth: 1, borderColor: "#D4A574", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+              { opacity: pressed || saving ? 0.8 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] },
+              { shadowColor: "#D4A574", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 2 }
             ]}
           >
             {saving ? (
-              <ActivityIndicator color="#0A0A0A" size="small" />
+              <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
               <>
-                <Text style={s.primaryBtnText}>Save to Closet</Text>
-                <Ionicons name="arrow-forward" size={16} color="#0A0A0A" />
+                <Text style={{ fontSize: 18, color: "#FFFFFF", fontWeight: 'bold' }}>Save to Closet</Text>
+                <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
               </>
             )}
           </Pressable>
@@ -463,7 +469,8 @@ const s = StyleSheet.create({
 
   // Photo
   photoWrap: {
-    width: "100%", aspectRatio: 3 / 4, position: "relative", backgroundColor: SURFACE,
+    width: "78%", alignSelf: "center", borderRadius: 16, overflow: "hidden", 
+    aspectRatio: 3 / 4, position: "relative", backgroundColor: SURFACE,
   },
   photo: { width: "100%", height: "100%" },
   photoClose: {

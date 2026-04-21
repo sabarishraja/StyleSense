@@ -26,6 +26,7 @@ interface ClosetState {
     storagePath: string,
     userId: string
   ) => Promise<void>;
+  updateItem: (id: string, updates: Partial<ClothingItem>) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
   deleteAllItems: () => Promise<void>;
 
@@ -196,6 +197,24 @@ export const useClosetStore = create<ClosetState>((set, get) => ({
       throw err;
     } finally {
       set({ loading: false });
+    }
+  },
+
+  updateItem: async (id: string, updates: Partial<ClothingItem>) => {
+    try {
+      const { error } = await supabase
+        .from("clothing_items")
+        .update(updates)
+        .eq("id", id);
+
+      if (error) throw error;
+
+      set((state) => ({
+        items: state.items.map((item) => (item.id === id ? { ...item, ...updates } : item)),
+      }));
+    } catch (err: any) {
+      set({ error: err.message || "Failed to update item" });
+      throw err;
     }
   },
 
