@@ -164,9 +164,16 @@ export default function ItemDetailScreen() {
 
             <View style={s.row}>
               <Text style={s.rowLabel}>Color</Text>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                {item.primary_color && <View style={[s.colorSwatch, { backgroundColor: item.primary_color }]} />}
-                <Text style={s.rowValue}>{item.primary_color_name || "Unknown"}</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1, justifyContent: "flex-end", flexWrap: "wrap", paddingLeft: 20 }}>
+                <View style={{ flexDirection: "row", gap: 4 }}>
+                  {item.primary_color && <View style={[s.colorSwatch, { backgroundColor: item.primary_color }]} />}
+                  {item.secondary_colors?.map((c, i) => (
+                    <View key={i} style={[s.colorSwatch, { backgroundColor: c.hex }]} />
+                  ))}
+                </View>
+                <Text style={[s.rowValue, { textAlign: "right" }]} numberOfLines={2}>
+                  {[item.primary_color_name, ...(item.secondary_colors || []).map(c => c.name)].filter(Boolean).join(', ') || "Unknown"}
+                </Text>
               </View>
             </View>
             <View style={s.rowDivider} />
@@ -234,9 +241,16 @@ export default function ItemDetailScreen() {
 
             <View style={s.row}>
               <Text style={s.rowLabel}>Color</Text>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                {item.primary_color && <View style={[s.colorSwatch, { backgroundColor: item.primary_color }]} />}
-                <Text style={s.rowValue}>{item.primary_color_name || "Unknown"}</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1, justifyContent: "flex-end", flexWrap: "wrap", paddingLeft: 20 }}>
+                <View style={{ flexDirection: "row", gap: 4 }}>
+                  {item.primary_color && <View style={[s.colorSwatch, { backgroundColor: item.primary_color }]} />}
+                  {item.secondary_colors?.map((c, i) => (
+                    <View key={i} style={[s.colorSwatch, { backgroundColor: c.hex }]} />
+                  ))}
+                </View>
+                <Text style={[s.rowValue, { textAlign: "right" }]} numberOfLines={2}>
+                  {[item.primary_color_name, ...(item.secondary_colors || []).map(c => c.name)].filter(Boolean).join(', ') || "Unknown"}
+                </Text>
               </View>
             </View>
             <View style={s.rowDivider} />

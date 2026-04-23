@@ -31,24 +31,23 @@ function ScanOverlay() {
   const chip = useRef(new Animated.Value(0.5)).current;
   useEffect(() => {
     Animated.loop(
-      Animated.timing(line, { toValue: 1, duration: 1800, useNativeDriver: true })
+      Animated.timing(line, { toValue: 1, duration: 2500, useNativeDriver: true })
     ).start();
     Animated.loop(
       Animated.sequence([
         Animated.timing(chip, { toValue: 1, duration: 800, useNativeDriver: true }),
-        Animated.timing(chip, { toValue: 0.5, duration: 800, useNativeDriver: true }),
+        Animated.timing(chip, { toValue: 0.3, duration: 800, useNativeDriver: true }),
       ])
     ).start();
   }, []);
   return (
     <View style={StyleSheet.absoluteFill}>
-      <View style={s.scanDim} />
       <Animated.View style={[s.scanBeam, {
-        transform: [{ translateY: line.interpolate({ inputRange: [0, 1], outputRange: [0, 400] }) }],
+        transform: [{ translateY: line.interpolate({ inputRange: [0, 1], outputRange: [0, 380] }) }],
       }]} />
       <Animated.View style={[s.scanChip, { opacity: chip }]}>
         <View style={s.scanDot} />
-        <Text style={s.scanChipText}>Claude is analyzing…</Text>
+        <Text style={s.scanChipText}>/usr/claude / vision_processing</Text>
       </Animated.View>
     </View>
   );
@@ -150,55 +149,52 @@ export default function AddItemScreen() {
   // ── CAPTURE ──────────────────────────────────────────────────
   if (phase === "capture") {
     return (
-      <View style={[s.flex, s.captureContainer, { paddingTop: insets.top, paddingBottom: insets.bottom + 20 }]}>
+      <View style={[s.flex, s.captureContainer, { paddingTop: insets.top, paddingBottom: insets.bottom || 32 }]}>
         
-        {/* Top Spacer / Error */}
+        {/* Top Header */}
         <View style={s.captureTop}>
-          {error && (
+          <Pressable onPress={() => router.canGoBack() ? router.back() : null} style={s.closeBtn}>
+            <Ionicons name="close" size={20} color={TEXT_DIM} />
+          </Pressable>
+          <Text style={s.headerTitle}>NEW ITEM</Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        {error && (
+          <View style={{ paddingHorizontal: 24, marginTop: 10 }}>
             <Pressable onPress={() => setError(null)} style={s.errorBanner}>
               <Text style={s.errorText}>{error}</Text>
             </Pressable>
-          )}
-        </View>
+          </View>
+        )}
 
-        {/* Center Content: Viewfinder and Text blocks */}
+        {/* Center Content */}
         <View style={s.captureCenter}>
-          <Pressable
-            onPress={() => pickImage(true)}
-            style={({ pressed }) => [
-              s.viewfinder, 
-              { width: width * 0.58 }, // roughly 58% of screen width
-              { opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }
-            ]}
-          >
-            {/* 4 Corner Brackets using Gold Accent */}
-            <View style={[s.bracket, s.bracketTL]} />
-            <View style={[s.bracket, s.bracketTR]} />
-            <View style={[s.bracket, s.bracketBL]} />
-            <View style={[s.bracket, s.bracketBR]} />
-            
-            <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="camera-outline" size={56} color={ACCENT} />
-              <View style={{ position: 'absolute', bottom: -5, right: -5, backgroundColor: SURFACE, borderRadius: 14 }}>
-                <Ionicons name="add-circle" size={28} color={ACCENT} />
-              </View>
-            </View>
-          </Pressable>
+          <View style={s.cameraIconBox}>
+            <Ionicons name="camera-outline" size={36} color={BTN_ACCENT} />
+          </View>
 
           <View style={s.textBlock}>
-            <Text style={s.stepLabel}>STEP 01 · CAPTURE</Text>
             <Text style={s.captureTitle}>Show Claude{"\n"}the garment.</Text>
-            <Text style={s.captureSub}>Plain background, good light.{"\n"}One piece at a time.</Text>
+            <Text style={s.captureSub}>Plain background, good light. One piece{"\n"}at a time.</Text>
           </View>
         </View>
 
-        {/* Bottom Left Action */}
+        {/* Bottom Actions */}
         <View style={s.captureBottom}>
           <Pressable
-            onPress={() => pickImage(false)}
-            style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }, s.libraryBtn]}
+            onPress={() => pickImage(true)}
+            style={({ pressed }) => [s.primaryBtnFull, { opacity: pressed ? 0.8 : 1, transform: [{scale: pressed ? 0.98 : 1}] }]}
           >
-            <Text style={s.libraryText}>Choose from Library</Text>
+            <Ionicons name="camera-outline" size={22} color="#0A0A0A" />
+            <Text style={s.primaryBtnTextFull}>Take Photo</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => pickImage(false)}
+            style={({ pressed }) => [s.secondaryBtnFull, { opacity: pressed ? 0.8 : 1, transform: [{scale: pressed ? 0.98 : 1}] }]}
+          >
+            <Ionicons name="images-outline" size={22} color={TEXT} />
+            <Text style={s.secondaryBtnTextFull}>Choose from Library</Text>
           </Pressable>
         </View>
         
@@ -223,11 +219,21 @@ export default function AddItemScreen() {
           {imageUri && (
             <Image
               source={{ uri: imageUri }}
-              style={[s.photo, analyzing && { opacity: 0.6 }]}
+              style={[s.photo, analyzing && s.photoAnalyzing]}
               resizeMode="cover"
             />
           )}
           {analyzing && <ScanOverlay />}
+
+          {/* Thin Brackets during analyzing */}
+          {analyzing && (
+            <>
+              <View style={[s.thinBracket, s.thinBracketTL]} />
+              <View style={[s.thinBracket, s.thinBracketTR]} />
+              <View style={[s.thinBracket, s.thinBracketBL]} />
+              <View style={[s.thinBracket, s.thinBracketBR]} />
+            </>
+          )}
 
           {/* Close button overlay */}
           <Pressable onPress={reset} style={s.photoClose}>
@@ -243,13 +249,23 @@ export default function AddItemScreen() {
               </Text>
             </View>
           )}
-          {analyzing && (
-            <View style={s.analyzingBadge}>
-              <ActivityIndicator size="small" color={ACCENT} />
-              <Text style={s.analyzingText}>Asking Claude…</Text>
-            </View>
-          )}
         </View>
+
+        {analyzing && (
+          <View style={s.analyzingBlock}>
+            <Text style={s.analyzingTitle}>Assessing formality...</Text>
+            
+            <View style={s.progressContainer}>
+              <View style={s.progressBarTrack}>
+                <View style={s.progressBarFill} />
+              </View>
+              <View style={s.progressTextRow}>
+                <Text style={s.progressMono}>CLAUDE SONNET 4.6</Text>
+                <Text style={s.progressMono}>100%</Text>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Form content */}
         {!analyzing && classification && (
@@ -280,9 +296,16 @@ export default function AddItemScreen() {
               {/* Color */}
               <View style={s.row}>
                 <Text style={s.rowLabel}>Color</Text>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                  <View style={[s.colorSwatch, { backgroundColor: classification.primary_color.hex }]} />
-                  <Text style={s.rowValue}>{classification.primary_color.name}</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1, justifyContent: "flex-end", flexWrap: "wrap", paddingLeft: 20 }}>
+                  <View style={{ flexDirection: "row", gap: 4 }}>
+                    <View style={[s.colorSwatch, { backgroundColor: classification.primary_color.hex }]} />
+                    {classification.secondary_colors?.map((c, i) => (
+                      <View key={i} style={[s.colorSwatch, { backgroundColor: c.hex }]} />
+                    ))}
+                  </View>
+                  <Text style={[s.rowValue, { textAlign: "right" }]} numberOfLines={2}>
+                    {[classification.primary_color.name, ...(classification.secondary_colors || []).map(c => c.name)].join(', ')}
+                  </Text>
                 </View>
               </View>
               <View style={s.rowDivider} />
@@ -351,21 +374,20 @@ export default function AddItemScreen() {
 
       {/* Save CTA — always visible at bottom */}
       {!analyzing && classification && (
-        <View style={[{ paddingHorizontal: 20, paddingVertical: 14, paddingBottom: insets.bottom || 20, backgroundColor: '#000', borderTopWidth: 1, borderTopColor: '#242424' }]}>
+        <View style={{ paddingHorizontal: 24, paddingVertical: 16, paddingBottom: insets.bottom || 24, backgroundColor: BG }}>
           <Pressable
             onPress={handleSave}
             disabled={saving}
             style={({ pressed }) => [
-              { height: 56, borderRadius: 16, backgroundColor: "transparent", borderWidth: 1, borderColor: "#D4A574", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
-              { opacity: pressed || saving ? 0.8 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] },
-              { shadowColor: "#D4A574", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 2 }
+              { width: "100%", height: 56, borderRadius: 28, backgroundColor: "transparent", borderWidth: 1, borderColor: BTN_ACCENT, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
+              { opacity: pressed || saving ? 0.8 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }
             ]}
           >
             {saving ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
               <>
-                <Text style={{ fontSize: 18, color: "#FFFFFF", fontWeight: 'bold' }}>Save to Closet</Text>
+                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 16, color: "#FFFFFF" }}>Save to Closet</Text>
                 <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
               </>
             )}
@@ -379,139 +401,125 @@ export default function AddItemScreen() {
 const s = StyleSheet.create({
   flex: { flex: 1, backgroundColor: BG },
   
-  // -- Capture View Overhauls --
   captureContainer: { 
-    justifyContent: "space-between", // Stretches top, center, and bottom evenly
+    justifyContent: "space-between",
   },
   captureTop: {
-    height: 40,
-    justifyContent: "center",
+    height: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+  },
+  closeBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: '#1E1E1E',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  headerTitle: {
+    fontFamily: "JetBrainsMono_400Regular",
+    fontSize: 10, letterSpacing: 2, color: TEXT_DIM,
   },
   captureCenter: {
-    alignItems: "center",
-    justifyContent: "center",
-    flex: 1, // Let center block take maximum remaining space
+    alignItems: "center", justifyContent: "center", flex: 1,
+  },
+  cameraIconBox: {
+    width: 88, height: 88, borderRadius: 30,
+    backgroundColor: '#262018',
+    borderWidth: 1, borderColor: 'rgba(212,165,116,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 44,
   },
   captureBottom: {
-    paddingHorizontal: 24,
-    paddingTop: 10,
-    alignItems: "flex-start",
+    paddingHorizontal: 24, paddingTop: 10,
+    gap: 12,
   },
-  
-  // Viewfinder Square
-  viewfinder: {
-    aspectRatio: 1,
-    backgroundColor: SURFACE,
-    borderRadius: 20,
-    alignItems: "center", 
-    justifyContent: "center",
-    marginBottom: 40,
-    // Soft inner shadow or pure solid block as requested matching editorial style
-    overflow: "hidden",
+  primaryBtnFull: {
+    width: "100%", height: 56, borderRadius: 28, backgroundColor: BTN_ACCENT,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
   },
-  // L-Shaped Brackets using absolute positioning
-  bracket: { position: "absolute", width: 24, height: 24, borderColor: ACCENT },
-  bracketTL: { top: 16, left: 16, borderTopWidth: 2, borderLeftWidth: 2 },
-  bracketTR: { top: 16, right: 16, borderTopWidth: 2, borderRightWidth: 2 },
-  bracketBL: { bottom: 16, left: 16, borderBottomWidth: 2, borderLeftWidth: 2 },
-  bracketBR: { bottom: 16, right: 16, borderBottomWidth: 2, borderRightWidth: 2 },
+  primaryBtnTextFull: { fontFamily: "Inter_600SemiBold", fontSize: 16, color: "#0A0A0A" },
+  secondaryBtnFull: {
+    width: "100%", height: 56, borderRadius: 28, backgroundColor: '#0F0F0F',
+    borderWidth: 1, borderColor: '#2A2A2A',
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
+  },
+  secondaryBtnTextFull: { fontFamily: "Inter_600SemiBold", fontSize: 16, color: '#FFFFFF' },
 
-  // Text Typography
-  textBlock: {
-    alignItems: "center",
-    paddingHorizontal: 24,
-  },
+  textBlock: { alignItems: "center", paddingHorizontal: 24 },
   stepLabel: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 11,
-    letterSpacing: 2,
-    color: ACCENT,
-    marginBottom: 16,
+    fontFamily: "JetBrainsMono_400Regular", fontSize: 10,
+    letterSpacing: 2.5, color: BTN_ACCENT, marginBottom: 16,
   },
   captureTitle: {
-    fontFamily: "Fraunces_400Regular",
-    fontSize: 34,
-    color: TEXT,
-    letterSpacing: -0.5,
-    marginBottom: 16,
-    textAlign: "center",
-    lineHeight: 38,
+    fontFamily: "Fraunces_400Regular", fontSize: 36, color: TEXT,
+    letterSpacing: -0.5, marginBottom: 16, textAlign: "center", lineHeight: 40,
   },
   captureSub: { 
-    fontFamily: "Inter_400Regular", 
-    fontSize: 14, 
-    color: TEXT_DIM,
-    textAlign: "center",
-    lineHeight: 22,
-  },
-  libraryBtn: {
-    paddingVertical: 10,
-  },
-  libraryText: { 
-    fontFamily: "Inter_500Medium", 
-    fontSize: 15, 
-    color: TEXT 
+    fontFamily: "Inter_400Regular", fontSize: 15, color: TEXT_DIM,
+    textAlign: "center", lineHeight: 22,
   },
 
   errorBanner: {
-    marginHorizontal: 20, padding: 12,
-    backgroundColor: "rgba(239,83,80,0.08)", borderWidth: 1,
+    padding: 12, backgroundColor: "rgba(239,83,80,0.08)", borderWidth: 1,
     borderColor: "rgba(239,83,80,0.25)", borderRadius: 12,
   },
   errorText: { fontFamily: "Inter_400Regular", fontSize: 13, color: "#EF5350", textAlign: "center" },
 
-  // Button 
-  primaryBtn: {
-    height: 54, borderRadius: 27, backgroundColor: BTN_ACCENT,
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-  },
-  primaryBtnText: { fontFamily: "Inter_600SemiBold", fontSize: 16, color: "#0A0A0A", letterSpacing: -0.1 },
-
-  // Photo
+  // Photo / Analyzing layout
   photoWrap: {
-    width: "78%", alignSelf: "center", borderRadius: 16, overflow: "hidden", 
-    aspectRatio: 3 / 4, position: "relative", backgroundColor: SURFACE,
+    width: "84%", alignSelf: "center", borderRadius: 24, overflow: "hidden", 
+    aspectRatio: 1, position: "relative", backgroundColor: '#1A1816',
+    borderWidth: 1, borderColor: '#2A251E',
   },
   photo: { width: "100%", height: "100%" },
+  photoAnalyzing: { opacity: 0.15 },
   photoClose: {
-    position: "absolute", top: 14, left: 14,
-    width: 32, height: 32, borderRadius: 9,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
-    alignItems: "center", justifyContent: "center",
+    position: "absolute", top: 16, left: 16,
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center",
   },
+  
+  thinBracket: { position: 'absolute', width: 16, height: 16, borderColor: BTN_ACCENT },
+  thinBracketTL: { top: 16, left: 16, borderTopWidth: 1.5, borderLeftWidth: 1.5 },
+  thinBracketTR: { top: 16, right: 16, borderTopWidth: 1.5, borderRightWidth: 1.5 },
+  thinBracketBL: { bottom: 16, left: 16, borderBottomWidth: 1.5, borderLeftWidth: 1.5 },
+  thinBracketBR: { bottom: 16, right: 16, borderBottomWidth: 1.5, borderRightWidth: 1.5 },
+
+  scanBeam: {
+    position: "absolute", left: 0, right: 0, height: 1.5, backgroundColor: BTN_ACCENT,
+    shadowColor: BTN_ACCENT, shadowOpacity: 1, shadowRadius: 10,
+  },
+  scanChip: {
+    position: "absolute", bottom: 16, left: 16,
+    flexDirection: "row", alignItems: "center", gap: 6,
+  },
+  scanDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: BTN_ACCENT },
+  scanChipText: { fontFamily: "JetBrainsMono_400Regular", fontSize: 9, color: TEXT_DIM, letterSpacing: 0.5 },
+
+  analyzingBlock: {
+    alignItems: 'center', marginTop: 32, paddingHorizontal: 24,
+  },
+  analyzingTitle: {
+    fontFamily: "Fraunces_400Regular", fontSize: 26, color: TEXT,
+    letterSpacing: -0.5, marginBottom: 40,
+  },
+
+  progressContainer: { width: '100%' },
+  progressBarTrack: { height: 2, backgroundColor: '#2A2A2A', width: '100%', borderRadius: 1 },
+  progressBarFill: { height: 2, backgroundColor: BTN_ACCENT, width: '100%', borderRadius: 1 },
+  progressTextRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
+  progressMono: { fontFamily: "JetBrainsMono_400Regular", fontSize: 9, color: TEXT_DIM, letterSpacing: 1 },
+
   detectedBadge: {
     position: "absolute", bottom: 14, left: 14,
     flexDirection: "row", alignItems: "center", gap: 5,
     paddingHorizontal: 11, paddingVertical: 6,
     backgroundColor: "rgba(0,0,0,0.7)",
-    borderRadius: 20, borderWidth: 1, borderColor: "rgba(201,169,110,0.3)", // matched to ACCENT hue
+    borderRadius: 20, borderWidth: 1, borderColor: "rgba(201,169,110,0.3)",
   },
   detectedStar: { color: ACCENT, fontSize: 9 },
   detectedLabel: { fontFamily: "Inter_500Medium", fontSize: 11, color: TEXT },
-  analyzingBadge: {
-    position: "absolute", bottom: 14, alignSelf: "center",
-    flexDirection: "row", alignItems: "center", gap: 8,
-    paddingHorizontal: 14, paddingVertical: 8,
-    backgroundColor: "rgba(0,0,0,0.75)",
-    borderRadius: 20, borderWidth: 1, borderColor: BORDER,
-  },
-  analyzingText: { fontFamily: "Inter_400Regular", fontSize: 12, color: TEXT },
-
-  scanDim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.3)" },
-  scanBeam: {
-    position: "absolute", left: 0, right: 0, height: 1.5, backgroundColor: ACCENT,
-    shadowColor: ACCENT, shadowOpacity: 1, shadowRadius: 10,
-  },
-  scanChip: {
-    position: "absolute", bottom: 56, alignSelf: "center",
-    flexDirection: "row", alignItems: "center", gap: 7,
-    paddingHorizontal: 14, paddingVertical: 7,
-    backgroundColor: "rgba(0,0,0,0.75)", borderRadius: 20,
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.07)",
-  },
-  scanDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: ACCENT },
-  scanChipText: { fontFamily: "Inter_400Regular", fontSize: 12, color: TEXT },
 
   // Form
   section: { paddingHorizontal: 20, paddingVertical: 18 },

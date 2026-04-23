@@ -53,8 +53,11 @@ export default function ItemCard({ item, onPress, onDelete }: ItemCardProps) {
           {displayName}
         </Text>
         {item.primary_color && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 }}>
             <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: item.primary_color, borderWidth: 1, borderColor: '#333' }} />
+            {item.secondary_colors?.map((c, i) => (
+              <View key={i} style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: c.hex, borderWidth: 1, borderColor: '#333' }} />
+            ))}
           </View>
         )}
       </View>
