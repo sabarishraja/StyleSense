@@ -442,7 +442,7 @@ const s = StyleSheet.create({
     width: "100%", height: 56, borderRadius: 28, backgroundColor: "#ffffffff",
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
   },
-  primaryBtnTextFull: { fontFamily: "Inter_600SemiBold", fontSize: 16, color: "#ffffffff" },
+  primaryBtnTextFull: { fontFamily: "Inter_600SemiBold", fontSize: 16, color: "#0A0A0A" },
   secondaryBtnFull: {
     width: "100%", height: 56, borderRadius: 28, backgroundColor: '#0A0A0A',
     borderWidth: 1, borderColor: '#2A2A2A',

@@ -2,7 +2,7 @@
 
 StyleSense is a mobile wardrobe app that uses AI to catalog your clothing. You photograph a garment, Claude analyzes it, and the app stores structured metadata — category, colors, formality, seasonality, style tags — so you can filter and browse your closet without thinking.
 
-Milestone 1 (this repo) covers the full capture-to-catalog pipeline. Milestone 2 (outfit suggestions based on occasion and weather) is scaffolded but not yet implemented.
+Milestone 1 (this repo) covers the full capture-to-catalog pipeline. Milestone 2 (outfit suggestions based on occasions) is fully implemented using Claude to mix and match your closet into curated looks.
 
 ---
 
@@ -133,8 +133,9 @@ supabase db push
 supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 supabase secrets set SUPABASE_SERVICE_ROLE_KEY=...
 
-# Deploy the Edge Function
+# Deploy the Edge Functions
 supabase functions deploy classify-item
+supabase functions deploy generate-outfits
 
 # Start the app
 npx expo start
@@ -153,7 +154,7 @@ app/
   (tabs)/
     closet.tsx         Main screen — clothing grid with category filters
     add.tsx            Capture → AI analysis → form review → save
-    outfits.tsx        Milestone 2 placeholder
+    outfits.tsx        AI outfit generation with 3-phase loading & results
     profile.tsx        User stats, sign out
 
 components/
@@ -172,7 +173,8 @@ types/
   index.ts             ClothingItem, Classification, Category, Season type definitions
 
 supabase/
-  functions/classify-item/index.ts    The Edge Function
+  functions/classify-item/index.ts    Image analysis function
+  functions/generate-outfits/index.ts Outfit generation function
   migrations/001_clothing_items.sql   Full schema + RLS policies
 ```
 
@@ -180,7 +182,10 @@ supabase/
 
 ## What's not done yet
 
-Milestone 2 is the outfit suggestion feature: given an occasion and a weather snapshot, Claude picks items from your closet that work together. The `outfit_suggestions` table is already in the schema. The outfits tab renders a placeholder. The actual generation logic — building the Claude prompt from real closet data, calling the function, storing and displaying results — hasn't been written.
+- **User Profiles & Auth Flow**: Supabase Auth is configured, but a polished login/signup UI flow and profile management are still needed for a full production release.
+- **Advanced Filtering**: Filtering the closet by seasons, tags, or secondary colors.
+- **Trip Packing Lists**: Allowing users to group outfits into collections for specific trips or dates on a calendar.
+- **Manual Overrides**: Letting users manually edit AI classifications if Claude makes a mistake.
 
 ---
 

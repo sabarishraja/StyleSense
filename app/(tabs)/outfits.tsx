@@ -1,16 +1,16 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   View, Text, StyleSheet, Pressable, ScrollView, Animated, Image, Dimensions
 } from "react-native";
+import * as Haptics from "expo-haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useClosetStore } from "@/store/closet";
 import { useOutfitsStore } from "@/store/outfits";
 import { router } from "expo-router";
-import type { ClothingItem } from "@/types";
 
 // ============================================================================
-// THEME CONSTANTS 
+// THEME CONSTANTS
 // ============================================================================
 const ACCENT = "#D4A574";
 const BG = "#0A0A0A";
@@ -22,6 +22,7 @@ const TEXT_MUTED = "#555555";
 const ERROR = "#FF4444";
 
 type ScreenState = "idle" | "loading" | "results" | "error" | "empty_closet" | "incomplete";
+type ViewMode = "generate" | "saved";
 
 const OCCASIONS = [
   { id: "casual", label: "Casual", icon: "shirt-outline", desc: "Formality 1–2 · Everyday wear" },
@@ -32,18 +33,33 @@ const OCCASIONS = [
   { id: "ethnic", label: "Ethnic", icon: "flower-outline", desc: "Ethnic wear · All formality levels" },
 ] as const;
 
+const OCCASION_LABEL_BY_ID: Record<string, string> =
+  OCCASIONS.reduce((acc, o) => ({ ...acc, [o.id]: o.label }), {} as Record<string, string>);
+
 const LOADING_MSGS = [
   "Filtering your wardrobe...",
   "Building outfit combinations...",
   "Claude is styling..."
 ];
 
+interface DisplayItem {
+  id: string;
+  image_url?: string;
+  subcategory: string | null;
+  category: string;
+  missing?: boolean;
+}
+
 interface MockOutfit {
   id: string;
   name: string;
-  items: ClothingItem[];
+  items: DisplayItem[];
   desc: string;
   piecesStr: string;
+  savedId: string | null;
+  sourceGeneratedId?: string;  // id in outfitsByOccasion entry, for the toggle-save flow
+  source_suggestion_id: string | null;
+  item_ids: string[];
 }
 
 // ============================================================================
@@ -87,9 +103,7 @@ function StatusChip() {
   const pulse = useRef(new Animated.Value(0.2)).current;
 
   useEffect(() => {
-    // Text interval
     const t = setInterval(() => setMsgIdx(i => (i + 1) % LOADING_MSGS.length), 1500);
-    // Pulse animation
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, { toValue: 1, duration: 600, useNativeDriver: true }),
@@ -109,13 +123,39 @@ function StatusChip() {
   );
 }
 
-// --- Result Card ---
-function OutfitResultCard({ outfit, index, occasionLabel, onRegenerate }: { outfit: MockOutfit, index: number, occasionLabel: string, onRegenerate: () => void }) {
+// --- Heart button ---
+function HeartBtn({ saved, onPress }: { saved: boolean; onPress: () => void }) {
+  return (
+    <Pressable hitSlop={8} onPress={onPress} style={s.heartBtn}>
+      <Ionicons
+        name={saved ? "heart" : "heart-outline"}
+        size={22}
+        color={saved ? ACCENT : TEXT_SEC}
+      />
+    </Pressable>
+  );
+}
+
+// --- Result Card (used for both generated + saved) ---
+function OutfitResultCard({
+  outfit,
+  index,
+  occasionLabel,
+  onRegenerate,
+  onToggleSave,
+  showRegenerate,
+}: {
+  outfit: MockOutfit;
+  index: number;
+  occasionLabel: string;
+  onRegenerate?: () => void;
+  onToggleSave: () => void;
+  showRegenerate: boolean;
+}) {
   const anim = useRef(new Animated.Value(0)).current;
   const [isRegenerating, setIsRegenerating] = useState(false);
 
   useEffect(() => {
-    // Stagger in
     Animated.timing(anim, {
       toValue: 1,
       duration: 250,
@@ -125,8 +165,9 @@ function OutfitResultCard({ outfit, index, occasionLabel, onRegenerate }: { outf
   }, []);
 
   const handleRegenerate = () => {
+    if (!onRegenerate) return;
     setIsRegenerating(true);
-    setTimeout(() => setIsRegenerating(false), 1200); // simulate local regen
+    setTimeout(() => setIsRegenerating(false), 1200);
     onRegenerate();
   };
 
@@ -143,8 +184,11 @@ function OutfitResultCard({ outfit, index, occasionLabel, onRegenerate }: { outf
     <Animated.View style={[s.resultCard, { opacity: anim, transform: [{ translateY }] }]}>
       <View style={s.resultCardHeader}>
         <Text style={s.resultCardTitle}>{outfit.name}</Text>
-        <View style={s.resultCardBadge}>
-          <Text style={s.resultCardBadgeText}>{occasionLabel}</Text>
+        <View style={s.headerRight}>
+          <View style={s.resultCardBadge}>
+            <Text style={s.resultCardBadgeText}>{occasionLabel}</Text>
+          </View>
+          <HeartBtn saved={!!outfit.savedId} onPress={onToggleSave} />
         </View>
       </View>
       <View style={s.divider} />
@@ -155,6 +199,13 @@ function OutfitResultCard({ outfit, index, occasionLabel, onRegenerate }: { outf
             return (
               <View key="extra" style={s.extraItemBox}>
                 <Text style={s.extraItemText}>+{extraCount}</Text>
+              </View>
+            );
+          }
+          if (item.missing) {
+            return (
+              <View key={item.id} style={[s.itemImgBox, { opacity: 0.4 }]}>
+                <Ionicons name="trash-outline" color={TEXT_MUTED} size={20} />
               </View>
             );
           }
@@ -173,21 +224,23 @@ function OutfitResultCard({ outfit, index, occasionLabel, onRegenerate }: { outf
       <Text style={s.piecesText}>{outfit.piecesStr}</Text>
       <Text style={s.reasonText}>"{outfit.desc}"</Text>
 
-      <View style={{ alignItems: "flex-end", marginTop: 14 }}>
-        <Pressable
-          onPress={handleRegenerate}
-          style={({ pressed }) => [
-            s.regenBtn,
-            { borderColor: pressed ? ACCENT : SURFACE2 }
-          ]}
-        >
-          {({ pressed }) => (
-            <Text style={[s.regenText, { color: pressed ? ACCENT : TEXT_SEC }]}>
-              ↺ Regenerate
-            </Text>
-          )}
-        </Pressable>
-      </View>
+      {showRegenerate && (
+        <View style={{ alignItems: "flex-end", marginTop: 14 }}>
+          <Pressable
+            onPress={handleRegenerate}
+            style={({ pressed }) => [
+              s.regenBtn,
+              { borderColor: pressed ? ACCENT : SURFACE2 }
+            ]}
+          >
+            {({ pressed }) => (
+              <Text style={[s.regenText, { color: pressed ? ACCENT : TEXT_SEC }]}>
+                ↺ Regenerate
+              </Text>
+            )}
+          </Pressable>
+        </View>
+      )}
     </Animated.View>
   );
 }
@@ -198,25 +251,87 @@ function OutfitResultCard({ outfit, index, occasionLabel, onRegenerate }: { outf
 export default function OutfitsScreen() {
   const insets = useSafeAreaInsets();
   const { items } = useClosetStore();
-  const { generateOutfits, outfitsByOccasion, clearOutfits } = useOutfitsStore();
-  
+  const {
+    generateOutfits,
+    outfitsByOccasion,
+    clearOutfits,
+    saveOutfit,
+    unsaveOutfit,
+    fetchSavedOutfits,
+    savedOutfits,
+  } = useOutfitsStore();
+
   const [state, setState] = useState<ScreenState>("idle");
   const [occasion, setOccasion] = useState<string | null>(null);
+  const [view, setView] = useState<ViewMode>("generate");
 
-  // Map generated IDs to actual ClothingItem objects from store to render images
-  const results = (occasion && outfitsByOccasion[occasion] ? outfitsByOccasion[occasion] : []).map(o => {
-    const realItems = o.item_ids.map(id => items.find(i => i.id === id)).filter(Boolean) as ClothingItem[];
-    // Filter out invalid items just in case the AI hallucinates an ID
-    return {
-      id: o.id,
-      name: o.name,
-      items: realItems,
-      piecesStr: realItems.map(i => i.subcategory || i.category).join(" · "),
-      desc: o.description
-    };
-  });
+  useEffect(() => {
+    fetchSavedOutfits();
+  }, []);
 
-  // Derived date
+  // Build display-ready results for the Generate view
+  const results: MockOutfit[] = useMemo(() => {
+    if (!occasion) return [];
+    const raw = outfitsByOccasion[occasion] || [];
+    return raw.map(o => {
+      const displayItems: DisplayItem[] = o.item_ids.map(id => {
+        const found = items.find(i => i.id === id);
+        if (!found) return { id, subcategory: null, category: "", missing: true };
+        return {
+          id: found.id,
+          image_url: found.image_url,
+          subcategory: found.subcategory,
+          category: found.category,
+        };
+      });
+      const piecesStr = displayItems
+        .filter(d => !d.missing)
+        .map(d => d.subcategory || d.category)
+        .join(" · ");
+      return {
+        id: o.id,
+        name: o.name,
+        items: displayItems,
+        desc: o.description,
+        piecesStr,
+        savedId: o.savedId,
+        sourceGeneratedId: o.id,
+        source_suggestion_id: o.source_suggestion_id,
+        item_ids: o.item_ids,
+      };
+    });
+  }, [occasion, outfitsByOccasion, items]);
+
+  // Build display-ready saved outfits for the Saved view
+  const savedResults: MockOutfit[] = useMemo(() => {
+    return savedOutfits.map(so => {
+      const displayItems: DisplayItem[] = so.item_ids.map(id => {
+        const found = items.find(i => i.id === id);
+        if (!found) return { id, subcategory: null, category: "", missing: true };
+        return {
+          id: found.id,
+          image_url: found.image_url,
+          subcategory: found.subcategory,
+          category: found.category,
+        };
+      });
+      const piecesStr = displayItems
+        .filter(d => !d.missing)
+        .map(d => d.subcategory || d.category)
+        .join(" · ");
+      return {
+        id: so.id,
+        name: so.name,
+        items: displayItems,
+        desc: so.description || "",
+        piecesStr,
+        savedId: so.id,
+        source_suggestion_id: so.source_suggestion_id,
+        item_ids: so.item_ids,
+      };
+    });
+  }, [savedOutfits, items]);
+
   const today = new Date();
   const dateStr = today.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 
@@ -224,8 +339,7 @@ export default function OutfitsScreen() {
 
   const startGeneration = async () => {
     if (!occasion) return;
-    
-    // Determine state based on actual items
+
     if (items.length === 0) {
       setState("empty_closet");
       return;
@@ -235,28 +349,57 @@ export default function OutfitsScreen() {
       return;
     }
 
-    // Go to loading animation
     setState("loading");
 
     try {
       const returnedOutfits = await generateOutfits(occasion, items);
-      
       if (!returnedOutfits || returnedOutfits.length === 0) {
-        setState("incomplete"); // AI decided it couldn't build any outfits
+        setState("incomplete");
       } else {
         setState("results");
       }
-    } catch(err) {
+    } catch (err) {
       console.error(err);
       setState("error");
     }
   };
 
   const handleRegenerateOutfit = () => {
-    // For now, regenerating forces a wipe of the active occasion and rerolls all 3 outfits.
-    if(occasion) {
+    if (occasion) {
       clearOutfits(occasion);
       startGeneration();
+    }
+  };
+
+  const handleToggleSave = async (occ: string, outfit: MockOutfit) => {
+    try {
+      if (outfit.savedId) {
+        await unsaveOutfit(occ, outfit.savedId);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      } else {
+        await saveOutfit(occ, {
+          id: outfit.sourceGeneratedId || outfit.id,
+          name: outfit.name,
+          item_ids: outfit.item_ids,
+          description: outfit.desc,
+          source_suggestion_id: outfit.source_suggestion_id,
+          savedId: null,
+        });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (err: any) {
+      console.warn("[outfits] toggle save failed:", err?.message || err);
+    }
+  };
+
+  const handleUnsaveFromSavedView = async (savedOutfit: MockOutfit) => {
+    try {
+      const so = savedOutfits.find(x => x.id === savedOutfit.id);
+      if (!so || !savedOutfit.savedId) return;
+      await unsaveOutfit(so.occasion, savedOutfit.savedId);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (err: any) {
+      console.warn("[outfits] unsave failed:", err?.message || err);
     }
   };
 
@@ -275,6 +418,27 @@ export default function OutfitsScreen() {
     </View>
   );
 
+  const renderViewToggle = () => (
+    <View style={s.toggleRow}>
+      <Pressable
+        onPress={() => setView("generate")}
+        style={[s.togglePill, view === "generate" && s.togglePillActive]}
+      >
+        <Text style={[s.togglePillText, view === "generate" && s.togglePillTextActive]}>
+          Generate
+        </Text>
+      </Pressable>
+      <Pressable
+        onPress={() => setView("saved")}
+        style={[s.togglePill, view === "saved" && s.togglePillActive]}
+      >
+        <Text style={[s.togglePillText, view === "saved" && s.togglePillTextActive]}>
+          Saved {savedOutfits.length > 0 ? `(${savedOutfits.length})` : ""}
+        </Text>
+      </Pressable>
+    </View>
+  );
+
   const renderEmptyState = (icon: any, title: string, sub: string, actionLabel: string, onAction: () => void, iconColor = "#333333") => (
     <View style={s.emptyStateWrap}>
       <Ionicons name={icon} size={48} color={iconColor} style={{ marginBottom: 16 }} />
@@ -286,11 +450,54 @@ export default function OutfitsScreen() {
     </View>
   );
 
+  // --- SAVED VIEW ---
+  if (view === "saved") {
+    return (
+      <View style={s.screen}>
+        {renderHeader()}
+        {renderViewToggle()}
+        <View style={s.contentArea}>
+          {savedResults.length === 0 ? (
+            renderEmptyState(
+              "heart-outline",
+              "No saved outfits yet",
+              "Tap the heart on a generated outfit to keep it here.",
+              "Generate Outfits",
+              () => setView("generate")
+            )
+          ) : (
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingBottom: 40, paddingTop: 8 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {savedResults.map((r, i) => {
+                const so = savedOutfits.find(x => x.id === r.id);
+                const label = so ? (OCCASION_LABEL_BY_ID[so.occasion] || so.occasion) : "STYLE";
+                return (
+                  <OutfitResultCard
+                    key={r.id}
+                    outfit={r}
+                    index={i}
+                    occasionLabel={label}
+                    onToggleSave={() => handleUnsaveFromSavedView(r)}
+                    showRegenerate={false}
+                  />
+                );
+              })}
+            </ScrollView>
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  // --- GENERATE VIEW ---
   return (
     <View style={s.screen}>
       {renderHeader()}
+      {renderViewToggle()}
 
-      {/* Persistent Occasion Picker (always visible except maybe generic error) */}
       {(state === "idle" || state === "loading" || state === "results") && (
         <View style={s.pickerSection}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.pickerScroll}>
@@ -303,7 +510,7 @@ export default function OutfitsScreen() {
                   style={[
                     s.tile,
                     isActive && s.tileActive,
-                    state !== "idle" && !isActive && { opacity: 0.4 } // dim unselected during/after loading
+                    state !== "idle" && !isActive && { opacity: 0.4 }
                   ]}
                 >
                   <Ionicons name={occ.icon as any} size={18} color={isActive ? ACCENT : TEXT_MUTED} style={{ marginBottom: 6 }} />
@@ -320,7 +527,6 @@ export default function OutfitsScreen() {
         </View>
       )}
 
-      {/* Content Area */}
       <View style={s.contentArea}>
         {state === "idle" && (
           <View style={{ flex: 1 }} />
@@ -347,6 +553,8 @@ export default function OutfitsScreen() {
                 index={i}
                 occasionLabel={activeOccasionObj?.label || "STYLE"}
                 onRegenerate={handleRegenerateOutfit}
+                onToggleSave={() => occasion && handleToggleSave(occasion, r)}
+                showRegenerate={true}
               />
             ))}
             <Pressable onPress={reset} style={s.startOverBtn}>
@@ -358,17 +566,16 @@ export default function OutfitsScreen() {
         {state === "empty_closet" && renderEmptyState(
           "shirt-outline", "Your closet is empty", "Add some clothes to get started", "Add Item", () => router.push("/(tabs)/add")
         )}
-        
+
         {state === "incomplete" && renderEmptyState(
           "extension-puzzle-outline", `Incomplete wardrobe for ${activeOccasionObj?.label}`, "You're missing enough items to complete an outfit.", "Add More Items", () => router.push("/(tabs)/add")
         )}
 
         {state === "error" && renderEmptyState(
-          "alert-triangle-outline", "Something went wrong", "Couldn't generate outfits. Try again.", "Try Again", reset, ERROR
+          "alert-circle-outline", "Something went wrong", "Couldn't generate outfits. Try again.", "Try Again", reset, ERROR
         )}
       </View>
 
-      {/* Floating Action / Loaders at bottom */}
       {state === "idle" && (
         <View style={s.bottomFixed}>
           <Pressable
@@ -388,21 +595,19 @@ export default function OutfitsScreen() {
           <StatusChip />
         </View>
       )}
-
     </View>
   );
 }
 
 // ============================================================================
-// STYLES 
+// STYLES
 // ============================================================================
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: BG },
-  
-  // Header
+
   header: {
     paddingHorizontal: 16,
-    paddingBottom: 24,
+    paddingBottom: 16,
   },
   headerLabel: {
     fontFamily: "JetBrainsMono_400Regular",
@@ -418,7 +623,29 @@ const s = StyleSheet.create({
     fontSize: 14, color: TEXT_SEC, marginTop: 4,
   },
 
-  // Occasion Picker
+  // Generate / Saved toggle
+  toggleRow: {
+    flexDirection: "row",
+    alignSelf: "center",
+    backgroundColor: SURFACE,
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 14,
+    gap: 2,
+  },
+  togglePill: {
+    paddingVertical: 7,
+    paddingHorizontal: 18,
+    borderRadius: 8,
+  },
+  togglePillActive: { backgroundColor: SURFACE2 },
+  togglePillText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
+    color: TEXT_MUTED,
+  },
+  togglePillTextActive: { color: ACCENT },
+
   pickerSection: { marginBottom: 16 },
   pickerScroll: { paddingHorizontal: 16, gap: 10 },
   tile: {
@@ -443,11 +670,10 @@ const s = StyleSheet.create({
 
   contentArea: { flex: 1 },
 
-  // Bottom Fixed
   bottomFixed: {
     position: "absolute", bottom: 0, left: 0, right: 0,
     paddingHorizontal: 16, paddingBottom: 24, paddingTop: 10,
-    backgroundColor: BG, // flat base, no gradient
+    backgroundColor: BG,
   },
   generateBtn: {
     height: 52, backgroundColor: ACCENT, borderRadius: 14,
@@ -459,7 +685,6 @@ const s = StyleSheet.create({
   },
   generateBtnTextDisabled: { color: TEXT_MUTED },
 
-  // Status Chip
   statusChipContainer: { alignItems: "center", justifyContent: "center", paddingBottom: 10 },
   statusChip: {
     backgroundColor: SURFACE, borderWidth: 1, borderColor: SURFACE2,
@@ -469,7 +694,6 @@ const s = StyleSheet.create({
   statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: ACCENT },
   statusText: { fontFamily: "Inter_400Regular", fontSize: 13, color: TEXT_SEC },
 
-  // Skeleton
   skeletonCard: {
     backgroundColor: SURFACE, borderRadius: 20, padding: 16,
     marginHorizontal: 16, marginBottom: 8, height: 180,
@@ -479,12 +703,13 @@ const s = StyleSheet.create({
   skelLine1: { height: 14, borderRadius: 4, backgroundColor: SURFACE2, width: "60%", marginBottom: 10 },
   skelLine2: { height: 14, borderRadius: 4, backgroundColor: SURFACE2, width: "40%" },
 
-  // Results
   resultCard: {
     backgroundColor: SURFACE, borderRadius: 20, padding: 16,
     marginHorizontal: 16, marginBottom: 8,
   },
   resultCardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 10 },
+  heartBtn: { padding: 2 },
   resultCardTitle: {
     fontFamily: "JetBrainsMono_400Regular", fontSize: 10, color: TEXT_MUTED, letterSpacing: 2, textTransform: "uppercase"
   },
@@ -495,7 +720,7 @@ const s = StyleSheet.create({
     fontFamily: "JetBrainsMono_400Regular", fontSize: 10, color: ACCENT, textTransform: "uppercase",
   },
   divider: { height: 1, backgroundColor: SURFACE2, width: "100%", marginVertical: 12 },
-  
+
   itemRow: { flexDirection: "row", gap: 8 },
   itemImgBox: {
     width: 76, height: 76, borderRadius: 12, backgroundColor: SURFACE2, overflow: "hidden", alignItems: "center", justifyContent: "center",
@@ -520,7 +745,6 @@ const s = StyleSheet.create({
   startOverBtn: { alignItems: "center", paddingVertical: 20 },
   startOverText: { fontFamily: "Inter_500Medium", fontSize: 13, color: TEXT_SEC },
 
-  // Empty States
   emptyStateWrap: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32, paddingBottom: 60 },
   emptyTitle: { fontFamily: "Inter_500Medium", fontSize: 16, color: TEXT_SEC, marginBottom: 8, textAlign: "center" },
   emptySub: { fontFamily: "Inter_400Regular", fontSize: 13, color: TEXT_MUTED, textAlign: "center", marginBottom: 24, lineHeight: 20 },

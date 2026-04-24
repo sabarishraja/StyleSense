@@ -129,6 +129,19 @@ export interface OutfitRequest {
   created_at: string;
 }
 
+// -- Saved Outfit (favorites) --
+export interface SavedOutfit {
+  id: string;
+  user_id: string;
+  occasion: string;
+  name: string;
+  description: string | null;
+  item_ids: string[];
+  weather_snapshot: WeatherSnapshot | null;
+  source_suggestion_id: string | null;
+  created_at: string;
+}
+
 // -- Add Item Flow State --
 export type AddItemStep = "capture" | "uploading" | "review" | "saving";
 
