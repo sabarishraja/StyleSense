@@ -19,7 +19,7 @@ const BORDER = "#242424";
 const TEXT = "#FFFFFF";
 const TEXT_DIM = "#888888";
 const TEXT_MUTED = "#505050";
-const BTN_ACCENT = "#D4A574";
+const BTN_ACCENT = "#d2a575ff";
 
 type Phase = "capture" | "analyzing" | "form" | "saving";
 
@@ -150,7 +150,7 @@ export default function AddItemScreen() {
   if (phase === "capture") {
     return (
       <View style={[s.flex, s.captureContainer, { paddingTop: insets.top, paddingBottom: insets.bottom || 32 }]}>
-        
+
         {/* Top Header */}
         <View style={s.captureTop}>
           <Pressable onPress={() => router.canGoBack() ? router.back() : null} style={s.closeBtn}>
@@ -178,26 +178,28 @@ export default function AddItemScreen() {
             <Text style={s.captureTitle}>Show Claude{"\n"}the garment.</Text>
             <Text style={s.captureSub}>Plain background, good light. One piece{"\n"}at a time.</Text>
           </View>
+
+          {/* Action Buttons (Moved directly under text) */}
+          <View style={s.actionBlock}>
+            <Pressable
+              onPress={() => pickImage(true)}
+              style={({ pressed }) => [{ ...s.primaryBtnFull }, { opacity: pressed ? 0.8 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}
+            >
+              <Ionicons name="camera-outline" size={22} color="#0A0A0A" />
+              <Text style={s.primaryBtnTextFull}>Take Photo</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => pickImage(false)}
+              style={({ pressed }) => [{ ...s.secondaryBtnFull }, { opacity: pressed ? 0.8 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}
+            >
+              <Ionicons name="images-outline" size={22} color={TEXT} />
+              <Text style={s.secondaryBtnTextFull}>Choose from Library</Text>
+            </Pressable>
+          </View>
         </View>
 
-        {/* Bottom Actions */}
-        <View style={s.captureBottom}>
-          <Pressable
-            onPress={() => pickImage(true)}
-            style={({ pressed }) => [s.primaryBtnFull, { opacity: pressed ? 0.8 : 1, transform: [{scale: pressed ? 0.98 : 1}] }]}
-          >
-            <Ionicons name="camera-outline" size={22} color="#0A0A0A" />
-            <Text style={s.primaryBtnTextFull}>Take Photo</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => pickImage(false)}
-            style={({ pressed }) => [s.secondaryBtnFull, { opacity: pressed ? 0.8 : 1, transform: [{scale: pressed ? 0.98 : 1}] }]}
-          >
-            <Ionicons name="images-outline" size={22} color={TEXT} />
-            <Text style={s.secondaryBtnTextFull}>Choose from Library</Text>
-          </Pressable>
-        </View>
-        
+        {/* Empty view for spacing to keep center aligned */}
+        <View style={{ height: 44 }} />
       </View>
     );
   }
@@ -254,7 +256,7 @@ export default function AddItemScreen() {
         {analyzing && (
           <View style={s.analyzingBlock}>
             <Text style={s.analyzingTitle}>Assessing formality...</Text>
-            
+
             <View style={s.progressContainer}>
               <View style={s.progressBarTrack}>
                 <View style={s.progressBarFill} />
@@ -400,8 +402,8 @@ export default function AddItemScreen() {
 
 const s = StyleSheet.create({
   flex: { flex: 1, backgroundColor: BG },
-  
-  captureContainer: { 
+
+  captureContainer: {
     justifyContent: "space-between",
   },
   captureTop: {
@@ -430,17 +432,19 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 44,
   },
-  captureBottom: {
-    paddingHorizontal: 24, paddingTop: 10,
-    gap: 12,
+  actionBlock: {
+    width: "100%",
+    paddingHorizontal: 32,
+    marginTop: 40,
+    gap: 16,
   },
   primaryBtnFull: {
-    width: "100%", height: 56, borderRadius: 28, backgroundColor: BTN_ACCENT,
+    width: "100%", height: 56, borderRadius: 28, backgroundColor: "#ffffffff",
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
   },
-  primaryBtnTextFull: { fontFamily: "Inter_600SemiBold", fontSize: 16, color: "#0A0A0A" },
+  primaryBtnTextFull: { fontFamily: "Inter_600SemiBold", fontSize: 16, color: "#ffffffff" },
   secondaryBtnFull: {
-    width: "100%", height: 56, borderRadius: 28, backgroundColor: '#0F0F0F',
+    width: "100%", height: 56, borderRadius: 28, backgroundColor: '#0A0A0A',
     borderWidth: 1, borderColor: '#2A2A2A',
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
   },
@@ -455,7 +459,7 @@ const s = StyleSheet.create({
     fontFamily: "Fraunces_400Regular", fontSize: 36, color: TEXT,
     letterSpacing: -0.5, marginBottom: 16, textAlign: "center", lineHeight: 40,
   },
-  captureSub: { 
+  captureSub: {
     fontFamily: "Inter_400Regular", fontSize: 15, color: TEXT_DIM,
     textAlign: "center", lineHeight: 22,
   },
@@ -468,7 +472,7 @@ const s = StyleSheet.create({
 
   // Photo / Analyzing layout
   photoWrap: {
-    width: "84%", alignSelf: "center", borderRadius: 24, overflow: "hidden", 
+    width: "84%", alignSelf: "center", borderRadius: 24, overflow: "hidden",
     aspectRatio: 1, position: "relative", backgroundColor: '#1A1816',
     borderWidth: 1, borderColor: '#2A251E',
   },
@@ -479,7 +483,7 @@ const s = StyleSheet.create({
     width: 32, height: 32, borderRadius: 16,
     backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center",
   },
-  
+
   thinBracket: { position: 'absolute', width: 16, height: 16, borderColor: BTN_ACCENT },
   thinBracketTL: { top: 16, left: 16, borderTopWidth: 1.5, borderLeftWidth: 1.5 },
   thinBracketTR: { top: 16, right: 16, borderTopWidth: 1.5, borderRightWidth: 1.5 },
