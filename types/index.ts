@@ -114,10 +114,21 @@ export interface OutfitSuggestion {
   reasoning: string;
 }
 
+export type WeatherCondition =
+  | "clear"
+  | "partly_cloudy"
+  | "cloudy"
+  | "rain"
+  | "snow"
+  | "thunderstorm"
+  | "fog"
+  | "unknown";
+
 export interface WeatherSnapshot {
-  temp: number;
-  condition: string;
-  humidity: number;
+  temp_c: number;
+  condition: WeatherCondition;
+  humidity: number;     // 0-100
+  fetched_at: string;   // ISO timestamp
 }
 
 export interface OutfitRequest {

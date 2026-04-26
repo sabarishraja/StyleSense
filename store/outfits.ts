@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { generateClothingOutfits } from "@/lib/anthropic";
 import { supabase } from "@/lib/supabase";
-import type { ClothingItem, SavedOutfit } from "@/types";
+import type { ClothingItem, SavedOutfit, WeatherSnapshot } from "@/types";
 
 export interface GeneratedOutfit {
   id: string;                          // local render key
@@ -14,14 +14,23 @@ export interface GeneratedOutfit {
 
 interface OutfitsState {
   outfitsByOccasion: Record<string, GeneratedOutfit[]>;
+  weatherKeyByOccasion: Record<string, string>;
   savedOutfits: SavedOutfit[];
   loading: boolean;
   savedLoading: boolean;
   error: string | null;
 
-  generateOutfits: (occasion: string, availableItems: ClothingItem[]) => Promise<GeneratedOutfit[]>;
+  generateOutfits: (
+    occasion: string,
+    availableItems: ClothingItem[],
+    weather?: WeatherSnapshot | null
+  ) => Promise<GeneratedOutfit[]>;
   clearOutfits: (occasion?: string) => void;
-  saveOutfit: (occasion: string, outfit: GeneratedOutfit) => Promise<string>;
+  saveOutfit: (
+    occasion: string,
+    outfit: GeneratedOutfit,
+    weather?: WeatherSnapshot | null
+  ) => Promise<string>;
   unsaveOutfit: (occasion: string, savedId: string) => Promise<void>;
   fetchSavedOutfits: () => Promise<void>;
 }
@@ -32,17 +41,27 @@ async function getUserId(): Promise<string> {
   return data.user.id;
 }
 
+// Bucket weather to 10°C bands so a 1° fluctuation doesn't bust the session cache,
+// but a real warm-to-cold swing does.
+function weatherKey(w: WeatherSnapshot | null | undefined): string {
+  if (!w) return "no-weather";
+  const bucket = Math.round(w.temp_c / 10) * 10;
+  return `${w.condition}-${bucket}`;
+}
+
 export const useOutfitsStore = create<OutfitsState>((set, get) => ({
   outfitsByOccasion: {},
+  weatherKeyByOccasion: {},
   savedOutfits: [],
   loading: false,
   savedLoading: false,
   error: null,
 
-  generateOutfits: async (occasion: string, availableItems: ClothingItem[]) => {
-    // Session cache: skip Claude call if we already generated for this occasion
+  generateOutfits: async (occasion, availableItems, weather) => {
+    const requestKey = weatherKey(weather);
     const cached = get().outfitsByOccasion[occasion];
-    if (cached && cached.length > 0) {
+    const cachedKey = get().weatherKeyByOccasion[occasion];
+    if (cached && cached.length > 0 && cachedKey === requestKey) {
       return cached;
     }
 
@@ -58,7 +77,7 @@ export const useOutfitsStore = create<OutfitsState>((set, get) => ({
         tags: i.tags
       }));
 
-      const rawOutfits = await generateClothingOutfits(occasion, itemsPayload);
+      const rawOutfits = await generateClothingOutfits(occasion, itemsPayload, weather);
 
       // Persist the batch to outfit_suggestions (audit log / future history view).
       // Failure here must not block the user from seeing results.
@@ -70,7 +89,7 @@ export const useOutfitsStore = create<OutfitsState>((set, get) => ({
           .insert({
             user_id: userId,
             occasion,
-            weather_snapshot: null,
+            weather_snapshot: weather ?? null,
             suggestions: rawOutfits,
           })
           .select("id")
@@ -94,7 +113,11 @@ export const useOutfitsStore = create<OutfitsState>((set, get) => ({
         outfitsByOccasion: {
           ...state.outfitsByOccasion,
           [occasion]: mappedOutfits
-        }
+        },
+        weatherKeyByOccasion: {
+          ...state.weatherKeyByOccasion,
+          [occasion]: requestKey,
+        },
       }));
 
       return mappedOutfits;
@@ -109,16 +132,18 @@ export const useOutfitsStore = create<OutfitsState>((set, get) => ({
   clearOutfits: (occasion?: string) => {
     if (occasion) {
       set((state) => {
-        const next = { ...state.outfitsByOccasion };
-        delete next[occasion];
-        return { outfitsByOccasion: next };
+        const nextOutfits = { ...state.outfitsByOccasion };
+        const nextKeys = { ...state.weatherKeyByOccasion };
+        delete nextOutfits[occasion];
+        delete nextKeys[occasion];
+        return { outfitsByOccasion: nextOutfits, weatherKeyByOccasion: nextKeys };
       });
     } else {
-      set({ outfitsByOccasion: {} });
+      set({ outfitsByOccasion: {}, weatherKeyByOccasion: {} });
     }
   },
 
-  saveOutfit: async (occasion: string, outfit: GeneratedOutfit) => {
+  saveOutfit: async (occasion, outfit, weather) => {
     const userId = await getUserId();
     const { data, error } = await supabase
       .from("saved_outfits")
@@ -128,7 +153,7 @@ export const useOutfitsStore = create<OutfitsState>((set, get) => ({
         name: outfit.name,
         description: outfit.description,
         item_ids: outfit.item_ids,
-        weather_snapshot: null,
+        weather_snapshot: weather ?? null,
         source_suggestion_id: outfit.source_suggestion_id,
       })
       .select("*")
@@ -151,7 +176,7 @@ export const useOutfitsStore = create<OutfitsState>((set, get) => ({
     return saved.id;
   },
 
-  unsaveOutfit: async (occasion: string, savedId: string) => {
+  unsaveOutfit: async (occasion, savedId) => {
     const { error } = await supabase
       .from("saved_outfits")
       .delete()

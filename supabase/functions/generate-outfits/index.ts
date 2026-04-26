@@ -52,13 +52,59 @@ Deno.serve(async (req: Request) => {
     }
 
     // Parse request
-    const { occasion, items } = await req.json();
+    const { occasion, items, weather } = await req.json();
 
     if (!occasion || !Array.isArray(items)) {
       return new Response(
         JSON.stringify({ error: "occasion (string) and items (array) are required" }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
+    }
+
+    // Optional weather block prepended to the prompt when present.
+    // We compute hard requirements based on temp + condition so Claude doesn't
+    // treat outerwear as optional in cold/wet weather.
+    let weatherBlock = "";
+    if (weather && typeof weather.temp_c === "number") {
+      const t = weather.temp_c;
+      const cond = String(weather.condition);
+      const hasOuterwear = items.some((i: any) => i.category === "outerwear");
+      const hasFootwear = items.some((i: any) => i.category === "footwear");
+      const isCold = t <= 12;
+      const isChilly = t > 12 && t <= 17;
+      const isWet = cond === "rain" || cond === "snow" || cond === "thunderstorm";
+
+      const hardRules: string[] = [];
+      if (isCold && hasOuterwear) {
+        hardRules.push(
+          `- It is ${t}°C (cold). Every outfit MUST include exactly one item with category "outerwear" from the closet. ` +
+          `Do not skip outerwear in any of the 3 outfits unless the closet has none.`
+        );
+      } else if (isChilly && hasOuterwear) {
+        hardRules.push(
+          `- It is ${t}°C (chilly). At least 2 of the 3 outfits MUST include one outerwear item.`
+        );
+      }
+      if (isWet && hasFootwear) {
+        hardRules.push(
+          `- Conditions are ${cond}. Prefer footwear tagged with "boots", "waterproof", "rain", or closed-toe options. ` +
+          `Avoid open footwear (sandals, flip-flops, espadrilles) entirely.`
+        );
+      }
+      if (cond === "snow" && hasOuterwear) {
+        hardRules.push(`- It is snowing. The chosen outerwear should be insulated/heavy if available (look at subcategory and tags).`);
+      }
+
+      weatherBlock =
+        `\nCURRENT WEATHER AT USER'S LOCATION:\n` +
+        `- Temperature: ${t}°C\n` +
+        `- Conditions: ${cond}\n` +
+        `- Humidity: ${weather.humidity}%\n\n` +
+        (hardRules.length
+          ? `WEATHER-DRIVEN HARD REQUIREMENTS (override Rule 6 below where they conflict):\n${hardRules.join("\n")}\n\n`
+          : `Prefer items whose seasons match the current temperature.\n\n`) +
+        `If the closet truly doesn't have weather-appropriate pieces (e.g. cold weather but no outerwear at all), ` +
+        `still produce the best outfit possible and mention the mismatch in the description.\n`;
     }
 
     // Call Claude
@@ -78,7 +124,7 @@ Deno.serve(async (req: Request) => {
             content: [
               {
                 type: "text",
-                text: `${GENERATION_PROMPT}\n\nOCCASION: ${occasion}\n\nAVAILABLE ITEMS JSON:\n${JSON.stringify(items.map((i: any) => ({
+                text: `${GENERATION_PROMPT}${weatherBlock}\nOCCASION: ${occasion}\n\nAVAILABLE ITEMS JSON:\n${JSON.stringify(items.map((i: any) => ({
                   id: i.id,
                   category: i.category,
                   subcategory: i.subcategory,

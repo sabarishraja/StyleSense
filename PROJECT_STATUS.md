@@ -3,7 +3,7 @@
 > Living context doc. Paste the relevant sections into new AI sessions instead
 > of re-explaining the project. Update after each meaningful change.
 
-**Last updated:** 2026-04-24 (outfit persistence + favorites landed)
+**Last updated:** 2026-04-25 (advanced closet filtering landed)
 
 ---
 
@@ -19,7 +19,8 @@ Expo / React Native mobile app ("StyleSense"). Users photograph a clothing item 
 - **State:** Zustand 5
 - **Styling:** NativeWind 4 + Tailwind 3 · @expo/vector-icons
 - **Fonts:** Inter, Fraunces, JetBrains Mono (all via @expo-google-fonts)
-- **Media:** expo-image-picker, expo-blur, expo-haptics
+- **Media:** expo-image-picker, expo-blur, expo-haptics, expo-location
+- **Weather:** Open-Meteo (free, keyless) — direct client fetch from [lib/weather.ts](lib/weather.ts)
 - **Backend:** Supabase (Postgres + Storage + RLS + Edge Functions / Deno runtime) · @supabase/supabase-js 2.49
 - **Session persistence:** expo-sqlite/localStorage adapter for Supabase auth
 - **AI (via Edge Functions only — no API key in the app):**
@@ -94,6 +95,7 @@ app.json  tsconfig.json  package.json  .env.example
 - Delete-all with confirmation
 - Empty state prompts first add
 - Item count display (`N / total`)
+- **Advanced filters** ([components/FilterSheet.tsx](components/FilterSheet.tsx)): live free-text search over subcategory + color name, plus a Filters sheet with multi-select chips for season, formality (1–5), and tag (auto-derived from items, sorted by frequency). Active facet count badge on the Filters pill. AND-semantics across all facets. Filtered-to-zero shows a "Reset Filters" empty state. Filter state persists across tab switches via Zustand.
 
 **Add-item flow** (`app/(tabs)/add.tsx`)
 - Phase state machine: capture → analyzing → form → saving
@@ -132,6 +134,14 @@ app.json  tsconfig.json  package.json  .env.example
 - Saved view lists favorites newest-first with the same card visual; items deleted from the closet since save render as grayed-out placeholders instead of crashing.
 - Saved state is fetched on Outfits-tab mount and stays in sync with save/unsave actions.
 
+**Weather-aware suggestions** ([lib/weather.ts](lib/weather.ts), [app/(tabs)/outfits.tsx](app/(tabs)/outfits.tsx), [supabase/functions/generate-outfits/index.ts](supabase/functions/generate-outfits/index.ts))
+- On Outfits-tab mount, requests location (one-time `expo-location` permission with rationale set in [app.json](app.json)) and fetches current weather from Open-Meteo (`api.open-meteo.com/v1/forecast`, no API key needed). 30-min in-memory cache.
+- Tappable weather chip in the header shows e.g. `14°C · Rainy`. When location is denied, the chip becomes a "Enable location for weather-aware picks" CTA that re-requests permission.
+- Weather snapshot (`{ temp_c, condition, humidity, fetched_at }`) is forwarded to the `generate-outfits` Edge Function, which prepends a weather block to the Claude prompt and asks Claude to favor season/weather-appropriate items.
+- Snapshot is persisted on every `outfit_suggestions` row (audit log) and any `saved_outfits` row created with weather context.
+- Session cache for `outfitsByOccasion` is keyed by occasion + 10°C temperature bucket + condition, so a small temp fluctuation hits cache but a "warm → cold" change forces a regen.
+- Failure modes are silent: denied permission, offline, API error → just no chip, no weather context passed to Claude (parity with pre-feature behavior).
+
 **Profile**
 - User email/id, item counts, sign out, app version
 
@@ -140,8 +150,8 @@ app.json  tsconfig.json  package.json  .env.example
 ## 5. Partially done / not done ⚠️
 
 - **Full history view** — every generate batch is now logged to `outfit_suggestions`, but there's no UI to browse the history (only favorites are surfaced). Data is ready whenever we want to build it.
-- **Advanced closet filtering** — only category is filterable. Missing: season, formality, tag, free-text search by subcategory.
-- **Weather integration** — `outfit_suggestions.weather_snapshot` and `saved_outfits.weather_snapshot` columns exist but no weather API is wired and the generator prompt does not consume temperature.
+- **Color filter** — closet filtering covers season / formality / tag / search but not color (color names are noisy enough to deserve a separate design pass on color buckets).
+- **Re-analyze item with AI** — no way to re-run `classify-item` on an existing image when the original classification was wrong (e.g. jacket tagged as `top`). User has to manually edit category.
 - **Trip packing lists** — not started (Milestone 2 per README).
 - **Tests** — zero test coverage; nothing around the classifier prompt parsing in [lib/anthropic.ts](lib/anthropic.ts).
 - **CI** — no GitHub Actions / workflow.
@@ -213,7 +223,8 @@ Keep each bullet one line. If an item needs more detail, link to a file/PR rathe
 
 Nothing committed yet. Open candidates (pick one and I'll plan it):
 
-- **Advanced closet filtering** — season / formality / tag / text-search filters on the Closet tab. No backend changes. Most useful as the closet grows past ~30 items.
-- **Outfit history view** — surface every past generate batch (the data is already being logged to `outfit_suggestions`), grouped by date. UI-only feature, reuses existing components.
-- **Weather-aware outfit suggestions** — new weather API integration + location permission + generator prompt tweak. Bigger scope; `weather_snapshot` columns are already reserved on both `outfit_suggestions` and `saved_outfits`.
-- **Rehydrate and tweak a saved outfit** — open a saved outfit, swap one item, re-save. Deeper product feature, small-ish scope.
+- **Re-analyze item with AI** — button on item detail to re-run `classify-item` on the existing image; show a diff and let the user accept. Directly fixes the "jacket classified as top" problem. ~half-day.
+- **Outfit history view** — browse every past generate batch (already being logged to `outfit_suggestions`), grouped by date. UI-only. ~1 day.
+- **Edit / swap items in a saved outfit** — open a saved outfit, swap a piece, re-save. Needs a new item-picker UI. ~2 days.
+- **Color filter** — extend the closet filter sheet with color buckets (after a small design pass on which colors to bucket together).
+- **Tomorrow's weather / forecast** — extend the weather feature to "what to wear tomorrow morning" using Open-Meteo's hourly endpoint.

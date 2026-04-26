@@ -36,7 +36,13 @@
       "expo-router",
       "expo-font",
       "expo-image-picker",
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "StyleSense uses your location to suggest outfits suited to today's weather."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

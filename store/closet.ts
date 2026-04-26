@@ -6,6 +6,7 @@ import type {
   ClothingClassification,
   FilterKey,
   Category,
+  Season,
 } from "@/types";
 
 export type SortOrder = "newest" | "oldest";
@@ -13,8 +14,13 @@ export type SortOrder = "newest" | "oldest";
 interface ClosetState {
   items: ClothingItem[];
   loading: boolean;
-  filter: FilterKey;
+  filter: FilterKey;             // category facet (existing)
   sortOrder: SortOrder;
+  // Advanced filters (multi-select; empty = no constraint)
+  searchQuery: string;
+  seasonFilters: Season[];
+  formalityFilters: number[];    // values 1-5
+  tagFilters: string[];
   error: string | null;
 
   // Data operations
@@ -33,6 +39,11 @@ interface ClosetState {
   // Filter & Sort
   setFilter: (filter: FilterKey) => void;
   setSortOrder: (order: SortOrder) => void;
+  setSearchQuery: (q: string) => void;
+  setSeasonFilters: (s: Season[]) => void;
+  setFormalityFilters: (f: number[]) => void;
+  setTagFilters: (t: string[]) => void;
+  resetAdvancedFilters: () => void;
   getFilteredItems: () => ClothingItem[];
 
   // Upload + classify flow
@@ -79,6 +90,10 @@ export const useClosetStore = create<ClosetState>((set, get) => ({
   loading: false,
   filter: null,
   sortOrder: "newest",
+  searchQuery: "",
+  seasonFilters: [],
+  formalityFilters: [],
+  tagFilters: [],
   error: null,
 
   fetchItems: async () => {
@@ -277,16 +292,50 @@ export const useClosetStore = create<ClosetState>((set, get) => ({
 
   setSortOrder: (sortOrder: SortOrder) => set({ sortOrder }),
 
-  getFilteredItems: () => {
-    const { items, filter, sortOrder } = get();
-    
-    let result = items;
-    if (filter !== null) {
-      result = items.filter((item) => categoryMatchesFilter(item.category, filter));
-    }
+  setSearchQuery: (searchQuery: string) => set({ searchQuery }),
+  setSeasonFilters: (seasonFilters: Season[]) => set({ seasonFilters }),
+  setFormalityFilters: (formalityFilters: number[]) => set({ formalityFilters }),
+  setTagFilters: (tagFilters: string[]) => set({ tagFilters }),
 
-    // Return a sorted copy to avoid mutating the original array
-    return [...result].sort((a, b) => {
+  resetAdvancedFilters: () =>
+    set({ searchQuery: "", seasonFilters: [], formalityFilters: [], tagFilters: [] }),
+
+  getFilteredItems: () => {
+    const {
+      items, filter, sortOrder,
+      searchQuery, seasonFilters, formalityFilters, tagFilters,
+    } = get();
+
+    const search = searchQuery.trim().toLowerCase();
+
+    const filtered = items.filter((item) => {
+      if (filter !== null && !categoryMatchesFilter(item.category, filter)) return false;
+
+      if (
+        seasonFilters.length > 0 &&
+        !item.seasons.some((s) => seasonFilters.includes(s))
+      ) return false;
+
+      if (
+        formalityFilters.length > 0 &&
+        !formalityFilters.includes(item.formality)
+      ) return false;
+
+      if (
+        tagFilters.length > 0 &&
+        !item.tags.some((t) => tagFilters.includes(t))
+      ) return false;
+
+      if (search) {
+        const sub = (item.subcategory || "").toLowerCase();
+        const color = (item.primary_color_name || "").toLowerCase();
+        if (!sub.includes(search) && !color.includes(search)) return false;
+      }
+
+      return true;
+    });
+
+    return [...filtered].sort((a, b) => {
       const timeA = new Date(a.created_at).getTime();
       const timeB = new Date(b.created_at).getTime();
       return sortOrder === "newest" ? timeB - timeA : timeA - timeB;

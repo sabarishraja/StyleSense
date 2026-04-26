@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import type { ClothingClassification } from "@/types";
+import type { ClothingClassification, WeatherSnapshot } from "@/types";
 
 /**
  * Call the classify-item Edge Function.
@@ -54,7 +54,8 @@ export async function classifyClothingItem(
  */
 export async function generateClothingOutfits(
   occasion: string,
-  items: any[]
+  items: any[],
+  weather?: WeatherSnapshot | null
 ): Promise<Array<{ name: string; item_ids: string[]; description: string }>> {
   const {
     data: { session },
@@ -65,7 +66,7 @@ export async function generateClothingOutfits(
   }
 
   const response = await supabase.functions.invoke("generate-outfits", {
-    body: { occasion, items },
+    body: { occasion, items, weather: weather ?? null },
   });
 
   if (response.error) {

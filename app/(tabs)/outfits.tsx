@@ -8,6 +8,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useClosetStore } from "@/store/closet";
 import { useOutfitsStore } from "@/store/outfits";
 import { router } from "expo-router";
+import { getCurrentWeather, WEATHER_LABELS, WEATHER_ICONS, clearWeatherCache } from "@/lib/weather";
+import type { WeatherSnapshot } from "@/types";
 
 // ============================================================================
 // THEME CONSTANTS
@@ -264,10 +266,20 @@ export default function OutfitsScreen() {
   const [state, setState] = useState<ScreenState>("idle");
   const [occasion, setOccasion] = useState<string | null>(null);
   const [view, setView] = useState<ViewMode>("generate");
+  const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
+  const [weatherChecked, setWeatherChecked] = useState(false);
 
   useEffect(() => {
     fetchSavedOutfits();
+    refreshWeather();
   }, []);
+
+  const refreshWeather = async () => {
+    clearWeatherCache();
+    const snapshot = await getCurrentWeather();
+    setWeather(snapshot);
+    setWeatherChecked(true);
+  };
 
   // Build display-ready results for the Generate view
   const results: MockOutfit[] = useMemo(() => {
@@ -352,7 +364,7 @@ export default function OutfitsScreen() {
     setState("loading");
 
     try {
-      const returnedOutfits = await generateOutfits(occasion, items);
+      const returnedOutfits = await generateOutfits(occasion, items, weather);
       if (!returnedOutfits || returnedOutfits.length === 0) {
         setState("incomplete");
       } else {
@@ -384,7 +396,7 @@ export default function OutfitsScreen() {
           description: outfit.desc,
           source_suggestion_id: outfit.source_suggestion_id,
           savedId: null,
-        });
+        }, weather);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     } catch (err: any) {
@@ -415,8 +427,33 @@ export default function OutfitsScreen() {
       <Text style={s.headerLabel}>THE OUTFITS</Text>
       <Text style={s.headerTitle}>Styled For You</Text>
       <Text style={s.headerDate}>{dateStr}</Text>
+      {renderWeatherChip()}
     </View>
   );
+
+  const renderWeatherChip = () => {
+    if (weather) {
+      return (
+        <Pressable onPress={refreshWeather} style={s.weatherChip} hitSlop={6}>
+          <Ionicons name={WEATHER_ICONS[weather.condition] as any} size={14} color={ACCENT} />
+          <Text style={s.weatherChipText}>
+            {weather.temp_c}°C · {WEATHER_LABELS[weather.condition]}
+          </Text>
+        </Pressable>
+      );
+    }
+    if (weatherChecked) {
+      return (
+        <Pressable onPress={refreshWeather} style={[s.weatherChip, s.weatherChipMuted]} hitSlop={6}>
+          <Ionicons name="location-outline" size={14} color={TEXT_MUTED} />
+          <Text style={[s.weatherChipText, { color: TEXT_MUTED }]}>
+            Enable location for weather-aware picks
+          </Text>
+        </Pressable>
+      );
+    }
+    return null;
+  };
 
   const renderViewToggle = () => (
     <View style={s.toggleRow}>
@@ -621,6 +658,28 @@ const s = StyleSheet.create({
   headerDate: {
     fontFamily: "Inter_400Regular",
     fontSize: 14, color: TEXT_SEC, marginTop: 4,
+  },
+
+  weatherChip: {
+    alignSelf: "flex-start",
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: SURFACE,
+    borderWidth: 1,
+    borderColor: SURFACE2,
+    borderRadius: 14,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+  },
+  weatherChipMuted: {
+    borderColor: SURFACE2,
+  },
+  weatherChipText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+    color: TEXT_SEC,
   },
 
   // Generate / Saved toggle

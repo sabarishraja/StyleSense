@@ -1,9 +1,10 @@
-import React, { useCallback, useMemo } from "react";
-import { View, Text, FlatList, RefreshControl, Pressable, StyleSheet, Alert } from "react-native";
+import React, { useCallback, useMemo, useState } from "react";
+import { View, Text, FlatList, RefreshControl, Pressable, StyleSheet, Alert, TextInput, Platform } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useClosetStore } from "@/store/closet";
 import ItemCard from "@/components/ItemCard";
 import CategoryFilter from "@/components/CategoryFilter";
+import FilterSheet from "@/components/FilterSheet";
 import type { ClothingItem } from "@/types";
 
 import { Ionicons } from "@expo/vector-icons";
@@ -50,8 +51,22 @@ function ClosetHeader({
 }
 
 export default function ClosetScreen() {
-  const { items, loading, filter, sortOrder, fetchItems, setFilter, setSortOrder, deleteAllItems, deleteItem, error } = useClosetStore();
+  const {
+    items, loading, filter, sortOrder,
+    searchQuery, seasonFilters, formalityFilters, tagFilters,
+    fetchItems, setFilter, setSortOrder, setSearchQuery,
+    resetAdvancedFilters,
+    deleteAllItems, deleteItem, error,
+  } = useClosetStore();
+
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   useFocusEffect(useCallback(() => { fetchItems(); }, []));
+
+  const advancedFilterCount =
+    (seasonFilters.length > 0 ? 1 : 0) +
+    (formalityFilters.length > 0 ? 1 : 0) +
+    (tagFilters.length > 0 ? 1 : 0) +
+    (searchQuery.trim().length > 0 ? 1 : 0);
 
   const handleDeleteAll = () => {
     Alert.alert(
@@ -74,30 +89,63 @@ export default function ClosetScreen() {
     );
   };
 
-  // Compute filtered items directly from state to avoid stale closure issues
+  // Compute filtered items directly from state to avoid stale closure issues.
+  // Applies category + advanced facets (search / season / formality / tag) then sorts.
   const filteredItems = useMemo(() => {
-    let result = items;
-    if (filter !== null) {
-      result = items.filter((item) => {
+    const search = searchQuery.trim().toLowerCase();
+
+    const result = items.filter((item) => {
+      // Category facet (existing behavior)
+      if (filter !== null) {
         const normalizedCategory = String(item.category).toLowerCase().trim();
-        if (filter === "ethnic") return normalizedCategory.startsWith("ethnic_");
-        if (filter === "top") {
-          return (
-            normalizedCategory === "top" ||
-            normalizedCategory === "tops" ||
-            normalizedCategory === "outerwear" ||
-            normalizedCategory === "outerwears"
-          );
+        if (filter === "ethnic") {
+          if (!normalizedCategory.startsWith("ethnic_")) return false;
+        } else if (filter === "top") {
+          if (
+            normalizedCategory !== "top" &&
+            normalizedCategory !== "tops" &&
+            normalizedCategory !== "outerwear" &&
+            normalizedCategory !== "outerwears"
+          ) return false;
+        } else {
+          if (normalizedCategory !== filter && normalizedCategory !== filter + "s") return false;
         }
-        return normalizedCategory === filter || normalizedCategory === filter + "s";
-      });
-    }
+      }
+
+      // Season facet
+      if (
+        seasonFilters.length > 0 &&
+        !item.seasons.some((s) => seasonFilters.includes(s))
+      ) return false;
+
+      // Formality facet
+      if (
+        formalityFilters.length > 0 &&
+        !formalityFilters.includes(item.formality)
+      ) return false;
+
+      // Tag facet
+      if (
+        tagFilters.length > 0 &&
+        !item.tags.some((t) => tagFilters.includes(t))
+      ) return false;
+
+      // Search facet
+      if (search) {
+        const sub = (item.subcategory || "").toLowerCase();
+        const color = (item.primary_color_name || "").toLowerCase();
+        if (!sub.includes(search) && !color.includes(search)) return false;
+      }
+
+      return true;
+    });
+
     return [...result].sort((a, b) => {
       const timeA = new Date(a.created_at).getTime();
       const timeB = new Date(b.created_at).getTime();
       return sortOrder === "newest" ? timeB - timeA : timeA - timeB;
     });
-  }, [items, filter, sortOrder]);
+  }, [items, filter, sortOrder, searchQuery, seasonFilters, formalityFilters, tagFilters]);
 
   const handleDeleteItem = (item: ClothingItem) => {
     const label = item.subcategory || item.category;
@@ -119,23 +167,45 @@ export default function ClosetScreen() {
     <ItemCard item={item} onPress={() => router.push(`/item/${item.id}`)} onDelete={handleDeleteItem} />
   );
 
-  const renderEmpty = () => (
-    <View style={s.emptyWrap}>
-      <View style={s.emptyIcon}>
-        <Text style={s.emptyIconText}>◈</Text>
+  const renderEmpty = () => {
+    // Two empty states: no items at all vs. filtered-down-to-zero
+    const filtersActive = filter !== null || advancedFilterCount > 0;
+    if (items.length > 0 && filtersActive) {
+      return (
+        <View style={s.emptyWrap}>
+          <Ionicons name="filter-outline" size={48} color="#444" style={{ marginBottom: 16 }} />
+          <Text style={s.emptyTitle}>No items match these filters.</Text>
+          <Text style={s.emptyBody}>Try removing one of the active filters.</Text>
+          <Pressable
+            onPress={() => {
+              resetAdvancedFilters();
+              setFilter(null);
+            }}
+            style={({ pressed }) => [s.emptyBtn, { opacity: pressed ? 0.85 : 1 }]}
+          >
+            <Text style={s.emptyBtnText}>Reset Filters</Text>
+          </Pressable>
+        </View>
+      );
+    }
+    return (
+      <View style={s.emptyWrap}>
+        <View style={s.emptyIcon}>
+          <Text style={s.emptyIconText}>◈</Text>
+        </View>
+        <Text style={s.emptyTitle}>Your closet is empty.</Text>
+        <Text style={s.emptyBody}>
+          Start by photographing a piece. Claude will tag it so you can find it later.
+        </Text>
+        <Pressable
+          onPress={() => router.push("/(tabs)/add")}
+          style={({ pressed }) => [s.emptyBtn, { opacity: pressed ? 0.85 : 1 }]}
+        >
+          <Text style={s.emptyBtnText}>Add First Item</Text>
+        </Pressable>
       </View>
-      <Text style={s.emptyTitle}>Your closet is empty.</Text>
-      <Text style={s.emptyBody}>
-        Start by photographing a piece. Claude will tag it so you can find it later.
-      </Text>
-      <Pressable
-        onPress={() => router.push("/(tabs)/add")}
-        style={({ pressed }) => [s.emptyBtn, { opacity: pressed ? 0.85 : 1 }]}
-      >
-        <Text style={s.emptyBtnText}>Add First Item</Text>
-      </Pressable>
-    </View>
-  );
+    );
+  };
 
   return (
     <View style={s.flex}>
@@ -159,6 +229,41 @@ export default function ClosetScreen() {
               itemCount={items.length}
               onDeleteAll={handleDeleteAll}
             />
+            {items.length > 0 && (
+              <View style={s.searchRow}>
+                <View style={s.searchInputWrap}>
+                  <Ionicons name="search" size={16} color="#666" />
+                  <TextInput
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholder="Search subcategory or color"
+                    placeholderTextColor="#555"
+                    style={s.searchInput}
+                    autoCorrect={false}
+                    autoCapitalize="none"
+                    clearButtonMode="while-editing"
+                  />
+                  {Platform.OS !== "ios" && searchQuery.length > 0 && (
+                    <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
+                      <Ionicons name="close-circle" size={16} color="#666" />
+                    </Pressable>
+                  )}
+                </View>
+                <Pressable
+                  onPress={() => setFilterSheetOpen(true)}
+                  style={[s.filterPill, advancedFilterCount > 0 && s.filterPillActive]}
+                >
+                  <Ionicons
+                    name="options-outline"
+                    size={14}
+                    color={advancedFilterCount > 0 ? "#D4A574" : "#AAAAAA"}
+                  />
+                  <Text style={[s.filterPillText, advancedFilterCount > 0 && { color: "#D4A574" }]}>
+                    Filters{advancedFilterCount > 0 ? ` · ${advancedFilterCount}` : ""}
+                  </Text>
+                </Pressable>
+              </View>
+            )}
             {items.length > 0 && (
               <CategoryFilter activeFilter={filter} onFilterChange={setFilter} />
             )}
@@ -188,6 +293,7 @@ export default function ClosetScreen() {
         }
         showsVerticalScrollIndicator={false}
       />
+      <FilterSheet visible={filterSheetOpen} onClose={() => setFilterSheetOpen(false)} />
     </View>
   );
 }
@@ -227,6 +333,53 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: "rgba(239,83,80,0.35)",
     backgroundColor: "rgba(239,83,80,0.08)",
     alignItems: "center", justifyContent: "center",
+  },
+
+  searchRow: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 10,
+    alignItems: "center",
+  },
+  searchInputWrap: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#1A1A1A",
+    borderWidth: 1,
+    borderColor: "#2A2A2A",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 38,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: "#FFFFFF",
+    padding: 0,
+  },
+  filterPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "#2A2A2A",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    height: 38,
+  },
+  filterPillActive: {
+    borderColor: "#D4A574",
+    backgroundColor: "#1F1A12",
+  },
+  filterPillText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+    color: "#AAAAAA",
   },
 
   countStrip: {
