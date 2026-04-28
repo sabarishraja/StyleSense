@@ -2,6 +2,7 @@ import React from "react";
 import { View, Text, Pressable, Alert, ScrollView, StyleSheet } from "react-native";
 import { useAuthStore } from "@/store/auth";
 import { useClosetStore } from "@/store/closet";
+import { useOutfitsStore } from "@/store/outfits";
 import Constants from "expo-constants";
 
 const ACCENT = "#D4A574";
@@ -22,6 +23,7 @@ function InfoRow({ label, value, last }: { label: string; value: string; last?: 
 export default function ProfileScreen() {
   const { user, signOut, loading } = useAuthStore();
   const { items } = useClosetStore();
+  const { savedOutfits } = useOutfitsStore();
 
   const initials = user?.email
     ? user.email.slice(0, 2).toUpperCase()
@@ -61,7 +63,7 @@ export default function ProfileScreen() {
       <View style={s.statsRow}>
         {[
           { k: "Items", v: String(items.length) },
-          { k: "Outfits", v: "—" },
+          { k: "Outfits", v: String(savedOutfits.length) },
           { k: "This week", v: String(items.filter((i) => {
             const d = new Date(i.created_at);
             const now = new Date();

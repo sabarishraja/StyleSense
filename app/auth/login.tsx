@@ -144,12 +144,12 @@ const s = StyleSheet.create({
   },
   inputFocused: { borderColor: "#AAAAAA" },
   primaryBtn: {
-    height: 56, borderRadius: 28, backgroundColor: "#D4A574",
+    height: 56, borderRadius: 28, backgroundColor: "#FFFFFF",
     alignItems: "center", justifyContent: "center",
-    shadowColor: "#D4A574", shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
+    shadowColor: "#FFFFFF", shadowOpacity: 0.15, shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
   },
   primaryBtnText: {
-    fontFamily: "Inter_600SemiBold", fontSize: 16, color: "#0A0A0A", letterSpacing: -0.1,
+    fontFamily: "Inter_600SemiBold", fontSize: 16, color: "#000000", letterSpacing: -0.1,
   },
   toggle: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: 20 },
   toggleText: { fontFamily: "Inter_400Regular", fontSize: 13, color: "#AAAAAA" },

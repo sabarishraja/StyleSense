@@ -4,6 +4,7 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { View, ActivityIndicator } from "react-native";
 import { useAuthStore } from "@/store/auth";
+import { useOnboardingStore } from "@/store/onboarding";
 import {
   useFonts,
   Inter_400Regular,
@@ -22,6 +23,7 @@ import {
 
 export default function RootLayout() {
   const { user, initialized, initialize } = useAuthStore();
+  const { seen, checking, checkSeen } = useOnboardingStore();
   const router = useRouter();
   const segments = useSegments();
 
@@ -41,14 +43,26 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (!initialized) return;
+    if (user) checkSeen(user.id);
+  }, [user]);
+
+  useEffect(() => {
+    if (!initialized || checking) return;
     const inAuthGroup = segments[0] === "auth";
+    const inOnboarding = segments[0] === "onboarding";
+
     if (!user && !inAuthGroup) {
       router.replace("/auth/login");
     } else if (user && inAuthGroup) {
-      router.replace("/(tabs)/closet");
+      if (!seen) {
+        router.replace("/onboarding");
+      } else {
+        router.replace("/(tabs)/closet");
+      }
+    } else if (user && !seen && !inOnboarding) {
+      router.replace("/onboarding");
     }
-  }, [user, initialized, segments]);
+  }, [user, initialized, segments, seen, checking]);
 
   if (!initialized || !fontsLoaded) {
     return (
@@ -70,6 +84,7 @@ export default function RootLayout() {
         }}
       >
         <Stack.Screen name="auth" options={{ headerShown: false }} />
+        <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       </Stack>
     </>

@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useLocalSearchParams, Stack } from "expo-router";
 import { useClosetStore } from "@/store/closet";
 import { CATEGORIES, CATEGORY_LABELS } from "@/types";
-import type { Category, Season } from "@/types";
+import type { Category, Season, ColorInfo } from "@/types";
 
 const ACCENT = "#C9A96E";
 const BG = "#000000";
@@ -21,6 +21,7 @@ const BTN_ACCENT = "#D4A574";
 
 const FORMALITY_LABELS = ["", "Very Casual", "Casual", "Smart Casual", "Semi-Formal", "Black Tie"];
 const SEASONS_LIST: Season[] = ["spring", "summer", "fall", "winter"];
+
 
 export default function ItemDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -39,6 +40,8 @@ export default function ItemDetailScreen() {
   const [seasons, setSeasons] = useState<Set<Season>>(new Set());
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
+  const [primaryColor, setPrimaryColor] = useState<ColorInfo>({ hex: "#9E9E9E", name: "Grey" });
+  const [secondaryColors, setSecondaryColors] = useState<ColorInfo[]>([]);
 
   const startEditing = () => {
     if (!item) return;
@@ -47,8 +50,11 @@ export default function ItemDetailScreen() {
     setFormality(item.formality);
     setSeasons(new Set(item.seasons));
     setTags([...item.tags]);
+    setPrimaryColor({ hex: item.primary_color || "#9E9E9E", name: item.primary_color_name || "Grey" });
+    setSecondaryColors([...(item.secondary_colors || [])]);
     setIsEditing(true);
   };
+
 
   const handleSave = async () => {
     if (!item) return;
@@ -60,6 +66,9 @@ export default function ItemDetailScreen() {
         formality,
         seasons: Array.from(seasons),
         tags,
+        primary_color: primaryColor.hex,
+        primary_color_name: primaryColor.name,
+        secondary_colors: secondaryColors,
       });
       setIsEditing(false);
     } catch (error: any) {
@@ -239,18 +248,24 @@ export default function ItemDetailScreen() {
 
             <View style={s.divider} />
 
-            <View style={s.row}>
-              <Text style={s.rowLabel}>Color</Text>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1, justifyContent: "flex-end", flexWrap: "wrap", paddingLeft: 20 }}>
-                <View style={{ flexDirection: "row", gap: 4 }}>
-                  {item.primary_color && <View style={[s.colorSwatch, { backgroundColor: item.primary_color }]} />}
-                  {item.secondary_colors?.map((c, i) => (
-                    <View key={i} style={[s.colorSwatch, { backgroundColor: c.hex }]} />
-                  ))}
+            <View style={{ paddingVertical: 14 }}>
+              <Text style={[s.monoLabel, { marginBottom: 10 }]}>Colors · tap × to remove</Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                <View style={[s.colorChip, { opacity: 1 }]}>
+                  <View style={[s.colorSwatch, { backgroundColor: primaryColor.hex }]} />
+                  <Text style={s.colorChipText}>{primaryColor.name}</Text>
                 </View>
-                <Text style={[s.rowValue, { textAlign: "right" }]} numberOfLines={2}>
-                  {[item.primary_color_name, ...(item.secondary_colors || []).map(c => c.name)].filter(Boolean).join(', ') || "Unknown"}
-                </Text>
+                {secondaryColors.map(c => (
+                  <Pressable
+                    key={c.hex}
+                    onPress={() => setSecondaryColors(prev => prev.filter(sc => sc.hex !== c.hex))}
+                    style={s.colorChip}
+                  >
+                    <View style={[s.colorSwatch, { backgroundColor: c.hex }]} />
+                    <Text style={s.colorChipText}>{c.name}</Text>
+                    <Ionicons name="close" size={10} color={TEXT_MUTED} />
+                  </Pressable>
+                ))}
               </View>
             </View>
             <View style={s.rowDivider} />
@@ -410,4 +425,10 @@ const s = StyleSheet.create({
     borderRadius: 12, alignItems: "center", justifyContent: "center",
   },
   tagAddText: { fontFamily: "Inter_600SemiBold", fontSize: 13, color: BTN_ACCENT },
+  colorChip: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingHorizontal: 11, paddingVertical: 6,
+    borderRadius: 16, backgroundColor: SURFACE, borderWidth: 1, borderColor: BORDER,
+  },
+  colorChipText: { fontFamily: "Inter_400Regular", fontSize: 12, color: TEXT_DIM },
 });
