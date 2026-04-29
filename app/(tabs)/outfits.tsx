@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
-  View, Text, StyleSheet, Pressable, ScrollView, Animated, Image, Dimensions
+  View, Text, StyleSheet, Pressable, ScrollView, Animated, Image, Dimensions, Alert
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import { Ionicons } from "@expo/vector-icons";
@@ -9,6 +9,7 @@ import { useClosetStore } from "@/store/closet";
 import { useOutfitsStore } from "@/store/outfits";
 import { router } from "expo-router";
 import { getCurrentWeather, WEATHER_LABELS, WEATHER_ICONS, clearWeatherCache } from "@/lib/weather";
+import WearHistorySheet from "@/components/WearHistorySheet";
 import type { WeatherSnapshot } from "@/types";
 
 // ============================================================================
@@ -59,7 +60,7 @@ interface MockOutfit {
   desc: string;
   piecesStr: string;
   savedId: string | null;
-  sourceGeneratedId?: string;  // id in outfitsByOccasion entry, for the toggle-save flow
+  sourceGeneratedId?: string;
   source_suggestion_id: string | null;
   item_ids: string[];
 }
@@ -68,7 +69,6 @@ interface MockOutfit {
 // COMPONENTS
 // ============================================================================
 
-// --- Shimmer Skeleton Loader ---
 function SkeletonCard() {
   const shimmer = useRef(new Animated.Value(0)).current;
 
@@ -99,7 +99,6 @@ function SkeletonCard() {
   );
 }
 
-// --- Status Chip Loader ---
 function StatusChip() {
   const [msgIdx, setMsgIdx] = useState(0);
   const pulse = useRef(new Animated.Value(0.2)).current;
@@ -125,7 +124,6 @@ function StatusChip() {
   );
 }
 
-// --- Heart button ---
 function HeartBtn({ saved, onPress }: { saved: boolean; onPress: () => void }) {
   return (
     <Pressable hitSlop={8} onPress={onPress} style={s.heartBtn}>
@@ -138,7 +136,9 @@ function HeartBtn({ saved, onPress }: { saved: boolean; onPress: () => void }) {
   );
 }
 
-// --- Result Card (used for both generated + saved) ---
+// Stable no-op so generate-view cards skip the "Mark as Worn" button
+function noop() {}
+
 function OutfitResultCard({
   outfit,
   index,
@@ -146,6 +146,9 @@ function OutfitResultCard({
   onRegenerate,
   onToggleSave,
   showRegenerate,
+  wornToday,
+  onLogWorn,
+  onOpenHistory,
 }: {
   outfit: MockOutfit;
   index: number;
@@ -153,6 +156,9 @@ function OutfitResultCard({
   onRegenerate?: () => void;
   onToggleSave: () => void;
   showRegenerate: boolean;
+  wornToday: boolean;
+  onLogWorn: () => void;
+  onOpenHistory: () => void;
 }) {
   const anim = useRef(new Animated.Value(0)).current;
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -181,69 +187,84 @@ function OutfitResultCard({
 
   const showItems = outfit.items.slice(0, 4);
   const extraCount = outfit.items.length > 4 ? outfit.items.length - 3 : 0;
+  const isSavedCard = onOpenHistory !== noop;
 
   return (
-    <Animated.View style={[s.resultCard, { opacity: anim, transform: [{ translateY }] }]}>
-      <View style={s.resultCardHeader}>
-        <Text style={s.resultCardTitle}>{outfit.name}</Text>
-        <View style={s.headerRight}>
-          <View style={s.resultCardBadge}>
-            <Text style={s.resultCardBadgeText}>{occasionLabel}</Text>
-          </View>
-          <HeartBtn saved={!!outfit.savedId} onPress={onToggleSave} />
-        </View>
-      </View>
-      <View style={s.divider} />
-
-      <View style={s.itemRow}>
-        {showItems.map((item, i) => {
-          if (i === 3 && extraCount > 0) {
-            return (
-              <View key="extra" style={s.extraItemBox}>
-                <Text style={s.extraItemText}>+{extraCount}</Text>
-              </View>
-            );
-          }
-          if (item.missing) {
-            return (
-              <View key={item.id} style={[s.itemImgBox, { opacity: 0.4 }]}>
-                <Ionicons name="trash-outline" color={TEXT_MUTED} size={20} />
-              </View>
-            );
-          }
-          return (
-            <View key={item.id || i} style={s.itemImgBox}>
-              {item.image_url ? (
-                <Image source={{ uri: item.image_url }} style={s.itemImg} />
-              ) : (
-                <Ionicons name="shirt-outline" color={TEXT_MUTED} size={24} />
-              )}
+    <Pressable onPress={onOpenHistory} style={s.cardTouchable}>
+      <Animated.View style={[s.resultCard, { opacity: anim, transform: [{ translateY }] }]}>
+        <View style={s.resultCardHeader}>
+          <Text style={s.resultCardTitle}>{outfit.name}</Text>
+          <View style={s.headerRight}>
+            <View style={s.resultCardBadge}>
+              <Text style={s.resultCardBadgeText}>{occasionLabel}</Text>
             </View>
-          );
-        })}
-      </View>
-
-      <Text style={s.piecesText}>{outfit.piecesStr}</Text>
-      <Text style={s.reasonText}>"{outfit.desc}"</Text>
-
-      {showRegenerate && (
-        <View style={{ alignItems: "flex-end", marginTop: 14 }}>
-          <Pressable
-            onPress={handleRegenerate}
-            style={({ pressed }) => [
-              s.regenBtn,
-              { borderColor: pressed ? ACCENT : SURFACE2 }
-            ]}
-          >
-            {({ pressed }) => (
-              <Text style={[s.regenText, { color: pressed ? ACCENT : TEXT_SEC }]}>
-                ↺ Regenerate
-              </Text>
-            )}
-          </Pressable>
+            <HeartBtn saved={!!outfit.savedId} onPress={onToggleSave} />
+          </View>
         </View>
-      )}
-    </Animated.View>
+        <View style={s.divider} />
+
+        <View style={s.itemRow}>
+          {showItems.map((item, i) => {
+            if (i === 3 && extraCount > 0) {
+              return (
+                <View key="extra" style={s.extraItemBox}>
+                  <Text style={s.extraItemText}>+{extraCount}</Text>
+                </View>
+              );
+            }
+            if (item.missing) {
+              return (
+                <View key={item.id} style={[s.itemImgBox, { opacity: 0.4 }]}>
+                  <Ionicons name="trash-outline" color={TEXT_MUTED} size={20} />
+                </View>
+              );
+            }
+            return (
+              <View key={item.id || i} style={s.itemImgBox}>
+                {item.image_url ? (
+                  <Image source={{ uri: item.image_url }} style={s.itemImg} />
+                ) : (
+                  <Ionicons name="shirt-outline" color={TEXT_MUTED} size={24} />
+                )}
+              </View>
+            );
+          })}
+        </View>
+
+        <Text style={s.piecesText}>{outfit.piecesStr}</Text>
+        <Text style={s.reasonText}>"{outfit.desc}"</Text>
+
+        <View style={s.cardActions}>
+          {isSavedCard && (
+            <Pressable
+              onPress={(e) => { e.stopPropagation?.(); onLogWorn(); }}
+              disabled={wornToday}
+              style={[s.regenBtn, wornToday && s.wornBtn]}
+            >
+              <Text style={[s.regenText, wornToday && { color: ACCENT }]}>
+                {wornToday ? "✓ Worn Today" : "Mark as Worn"}
+              </Text>
+            </Pressable>
+          )}
+
+          {showRegenerate && (
+            <Pressable
+              onPress={(e) => { e.stopPropagation?.(); handleRegenerate(); }}
+              style={({ pressed }) => [
+                s.regenBtn,
+                { borderColor: pressed ? ACCENT : SURFACE2 }
+              ]}
+            >
+              {({ pressed }) => (
+                <Text style={[s.regenText, { color: pressed ? ACCENT : TEXT_SEC }]}>
+                  ↺ Regenerate
+                </Text>
+              )}
+            </Pressable>
+          )}
+        </View>
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -261,6 +282,8 @@ export default function OutfitsScreen() {
     unsaveOutfit,
     fetchSavedOutfits,
     savedOutfits,
+    logWorn,
+    wearLogsBySavedOutfit,
   } = useOutfitsStore();
 
   const [state, setState] = useState<ScreenState>("idle");
@@ -268,6 +291,7 @@ export default function OutfitsScreen() {
   const [view, setView] = useState<ViewMode>("generate");
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
   const [weatherChecked, setWeatherChecked] = useState(false);
+  const [historySheet, setHistorySheet] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     fetchSavedOutfits();
@@ -281,7 +305,6 @@ export default function OutfitsScreen() {
     setWeatherChecked(true);
   };
 
-  // Build display-ready results for the Generate view
   const results: MockOutfit[] = useMemo(() => {
     if (!occasion) return [];
     const raw = outfitsByOccasion[occasion] || [];
@@ -314,7 +337,6 @@ export default function OutfitsScreen() {
     });
   }, [occasion, outfitsByOccasion, items]);
 
-  // Build display-ready saved outfits for the Saved view
   const savedResults: MockOutfit[] = useMemo(() => {
     return savedOutfits.map(so => {
       const displayItems: DisplayItem[] = so.item_ids.map(id => {
@@ -346,6 +368,7 @@ export default function OutfitsScreen() {
 
   const today = new Date();
   const dateStr = today.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  const todayStr = today.toISOString().split("T")[0];
 
   const activeOccasionObj = OCCASIONS.find(o => o.id === occasion);
 
@@ -412,6 +435,15 @@ export default function OutfitsScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (err: any) {
       console.warn("[outfits] unsave failed:", err?.message || err);
+    }
+  };
+
+  const handleLogWorn = async (savedOutfitId: string) => {
+    try {
+      await logWorn(savedOutfitId);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      Alert.alert("Couldn't log", "Please try again.");
     }
   };
 
@@ -511,6 +543,8 @@ export default function OutfitsScreen() {
               {savedResults.map((r, i) => {
                 const so = savedOutfits.find(x => x.id === r.id);
                 const label = so ? (OCCASION_LABEL_BY_ID[so.occasion] || so.occasion) : "STYLE";
+                const logs = wearLogsBySavedOutfit[r.id] || [];
+                const wornToday = logs.some(l => l.worn_on === todayStr);
                 return (
                   <OutfitResultCard
                     key={r.id}
@@ -519,12 +553,22 @@ export default function OutfitsScreen() {
                     occasionLabel={label}
                     onToggleSave={() => handleUnsaveFromSavedView(r)}
                     showRegenerate={false}
+                    wornToday={wornToday}
+                    onLogWorn={() => handleLogWorn(r.id)}
+                    onOpenHistory={() => setHistorySheet({ id: r.id, name: r.name })}
                   />
                 );
               })}
             </ScrollView>
           )}
         </View>
+
+        <WearHistorySheet
+          visible={historySheet !== null}
+          outfitId={historySheet?.id ?? ""}
+          outfitName={historySheet?.name ?? ""}
+          onClose={() => setHistorySheet(null)}
+        />
       </View>
     );
   }
@@ -592,6 +636,9 @@ export default function OutfitsScreen() {
                 onRegenerate={handleRegenerateOutfit}
                 onToggleSave={() => occasion && handleToggleSave(occasion, r)}
                 showRegenerate={true}
+                wornToday={false}
+                onLogWorn={noop}
+                onOpenHistory={noop}
               />
             ))}
             <Pressable onPress={reset} style={s.startOverBtn}>
@@ -682,7 +729,6 @@ const s = StyleSheet.create({
     color: TEXT_SEC,
   },
 
-  // Generate / Saved toggle
   toggleRow: {
     flexDirection: "row",
     alignSelf: "center",
@@ -762,9 +808,12 @@ const s = StyleSheet.create({
   skelLine1: { height: 14, borderRadius: 4, backgroundColor: SURFACE2, width: "60%", marginBottom: 10 },
   skelLine2: { height: 14, borderRadius: 4, backgroundColor: SURFACE2, width: "40%" },
 
+  cardTouchable: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+  },
   resultCard: {
     backgroundColor: SURFACE, borderRadius: 20, padding: 16,
-    marginHorizontal: 16, marginBottom: 8,
   },
   resultCardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 10 },
@@ -796,10 +845,22 @@ const s = StyleSheet.create({
   reasonText: {
     fontFamily: "Inter_400Regular", fontStyle: "italic", fontSize: 14, lineHeight: 20, color: "#CCCCCC", marginTop: 10,
   },
-  regenBtn: {
-    borderWidth: 1, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 14, backgroundColor: "transparent"
+
+  cardActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 14,
+    gap: 8,
   },
-  regenText: { fontFamily: "Inter_400Regular", fontSize: 12 },
+  regenBtn: {
+    borderWidth: 1, borderColor: SURFACE2, borderRadius: 8,
+    paddingVertical: 6, paddingHorizontal: 14, backgroundColor: "transparent",
+  },
+  wornBtn: {
+    borderColor: ACCENT,
+  },
+  regenText: { fontFamily: "Inter_400Regular", fontSize: 12, color: TEXT_SEC },
 
   startOverBtn: { alignItems: "center", paddingVertical: 20 },
   startOverText: { fontFamily: "Inter_500Medium", fontSize: 13, color: TEXT_SEC },
