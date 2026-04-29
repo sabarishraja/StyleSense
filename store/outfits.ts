@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { generateClothingOutfits } from "@/lib/anthropic";
 import { supabase } from "@/lib/supabase";
-import type { ClothingItem, SavedOutfit, WeatherSnapshot } from "@/types";
+import type { ClothingItem, SavedOutfit, WearLog, WeatherSnapshot } from "@/types";
 
 export interface GeneratedOutfit {
   id: string;                          // local render key
@@ -19,6 +19,8 @@ interface OutfitsState {
   loading: boolean;
   savedLoading: boolean;
   error: string | null;
+  wearLogsBySavedOutfit: Record<string, WearLog[]>;
+  wearLogsLoading: boolean;
 
   generateOutfits: (
     occasion: string,
@@ -33,6 +35,9 @@ interface OutfitsState {
   ) => Promise<string>;
   unsaveOutfit: (occasion: string, savedId: string) => Promise<void>;
   fetchSavedOutfits: () => Promise<void>;
+  logWorn: (savedOutfitId: string) => Promise<void>;
+  unlogWorn: (logId: string, savedOutfitId: string) => Promise<void>;
+  fetchWearLogs: (savedOutfitId: string) => Promise<void>;
 }
 
 async function getUserId(): Promise<string> {
@@ -56,6 +61,8 @@ export const useOutfitsStore = create<OutfitsState>((set, get) => ({
   loading: false,
   savedLoading: false,
   error: null,
+  wearLogsBySavedOutfit: {},
+  wearLogsLoading: false,
 
   generateOutfits: async (occasion, availableItems, weather) => {
     const requestKey = weatherKey(weather);
@@ -209,6 +216,74 @@ export const useOutfitsStore = create<OutfitsState>((set, get) => ({
       console.warn("[outfits] fetchSavedOutfits failed:", err?.message || err);
     } finally {
       set({ savedLoading: false });
+    }
+  },
+
+  logWorn: async (savedOutfitId) => {
+    const userId = await getUserId();
+    const today = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
+
+    const { data, error } = await supabase
+      .from("wear_logs")
+      .insert({ user_id: userId, saved_outfit_id: savedOutfitId, worn_on: today })
+      .select("*")
+      .single();
+
+    if (error) {
+      // 23505 = unique_violation — already logged today, silently ignore
+      if (error.code === "23505") return;
+      throw new Error(`logWorn failed: ${error.message}`);
+    }
+
+    const newLog = data as WearLog;
+    set((state) => ({
+      wearLogsBySavedOutfit: {
+        ...state.wearLogsBySavedOutfit,
+        [savedOutfitId]: [newLog, ...(state.wearLogsBySavedOutfit[savedOutfitId] || [])],
+      },
+    }));
+  },
+
+  unlogWorn: async (logId, savedOutfitId) => {
+    const { error } = await supabase
+      .from("wear_logs")
+      .delete()
+      .eq("id", logId);
+
+    if (error) throw new Error(`unlogWorn failed: ${error.message}`);
+
+    set((state) => ({
+      wearLogsBySavedOutfit: {
+        ...state.wearLogsBySavedOutfit,
+        [savedOutfitId]: (state.wearLogsBySavedOutfit[savedOutfitId] || []).filter(
+          (l) => l.id !== logId
+        ),
+      },
+    }));
+  },
+
+  fetchWearLogs: async (savedOutfitId) => {
+    set({ wearLogsLoading: true });
+    try {
+      const { data, error } = await supabase
+        .from("wear_logs")
+        .select("*")
+        .eq("saved_outfit_id", savedOutfitId)
+        .order("worn_on", { ascending: false });
+
+      if (error) throw error;
+
+      set((state) => ({
+        wearLogsBySavedOutfit: {
+          ...state.wearLogsBySavedOutfit,
+          [savedOutfitId]: (data || []) as WearLog[],
+        },
+      }));
+    } catch (err: any) {
+      console.warn("[outfits] fetchWearLogs failed:", err?.message || err);
+      throw err;
+    } finally {
+      set({ wearLogsLoading: false });
     }
   },
 }));
