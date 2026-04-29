@@ -153,6 +153,14 @@ export interface SavedOutfit {
   created_at: string;
 }
 
+// -- Wear Log --
+export interface WearLog {
+  id: string;
+  user_id: string;
+  saved_outfit_id: string;
+  worn_on: string; // ISO date "YYYY-MM-DD"
+}
+
 // -- Add Item Flow State --
 export type AddItemStep = "capture" | "uploading" | "review" | "saving";
 
