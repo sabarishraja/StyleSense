@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Outfits Tab — Phase 1 (print)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  html, body { margin:0; padding:0; font-family:'Inter', system-ui, sans-serif; -webkit-font-smoothing:antialiased; background:#f0eee9; color:#2a251f; }
+  *, *::before, *::after { box-sizing: border-box; }
+  .hide-scrollbar::-webkit-scrollbar { display: none; }
+  .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  button { font-family: inherit; cursor: default; }
+
+  .sheet { max-width: 1200px; margin: 0 auto; padding: 40px 32px; page-break-after: always; break-after: page; }
+  .sheet:last-child { page-break-after: auto; break-after: auto; }
+  .sheet-head { margin-bottom: 28px; }
+  .sheet-kicker { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 2.5px; color:#c96442; text-transform: uppercase; font-weight: 600; margin-bottom: 6px; }
+  .sheet-title { font-family: 'Fraunces', serif; font-size: 32px; letter-spacing: -0.8px; color: #2a251f; margin: 0 0 6px; font-weight: 400; }
+  .sheet-sub { font-family: 'Inter', sans-serif; font-size: 13px; color: rgba(40,30,20,0.6); max-width: 560px; line-height: 1.5; }
+
+  .row { display: flex; gap: 32px; flex-wrap: wrap; align-items: flex-start; justify-content: center; }
+  .board { display: flex; flex-direction: column; break-inside: avoid; page-break-inside: avoid; }
+  .board-labelrow { display:flex; align-items:baseline; gap:10px; margin: 0 4px 8px; }
+  .board-kicker { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 1.5px; color: #c96442; text-transform: uppercase; font-weight:600; }
+  .board-label { font-family: 'Inter', sans-serif; font-size: 13px; color: #2a251f; font-weight: 500; }
+  .frame-shell { box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 12px 24px rgba(0,0,0,.10); border-radius: 48px; }
+
+  @page { size: landscape; margin: 0.4cm; }
+  @media print {
+    html, body { background: #f0eee9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    *, *::before, *::after { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; animation: none !important; transition: none !important; }
+    .sheet { padding: 14px 16px; max-width: none; }
+    .sheet-head { margin-bottom: 14px; }
+    .sheet-title { font-size: 22px; }
+    .sheet-sub { font-size: 11px; }
+    .row { gap: 24px; }
+    .frame-shell { box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 4px 10px rgba(0,0,0,.10); }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="frames/ios-frame.jsx"></script>
+<script type="text/babel" src="src/tokens.jsx"></script>
+<script type="text/babel" src="src/data.jsx"></script>
+<script type="text/babel" src="src/primitives.jsx"></script>
+<script type="text/babel" src="src/screen-outfits-tab.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+function InDevice({ children }) {
+  return (
+    <div className="frame-shell">
+      <IOSDevice dark={true} width={360} height={760}>
+        <div style={{minHeight:'100%', paddingTop: 54, background: '#0A0A0A'}}>
+          {children}
+        </div>
+      </IOSDevice>
+    </div>
+  );
+}
+
+function Board({ kicker, label, children }) {
+  return (
+    <div className="board">
+      <div className="board-labelrow">
+        <span className="board-kicker">{kicker}</span>
+        <span className="board-label">{label}</span>
+      </div>
+      <InDevice>{children}</InDevice>
+    </div>
+  );
+}
+
+function Print() {
+  return (
+    <>
+      <section className="sheet">
+        <div className="sheet-head">
+          <div className="sheet-kicker">StyleSense · Outfits Tab</div>
+          <h1 className="sheet-title">Three primary states</h1>
+          <div className="sheet-sub">Idle → Loading → Results. Header and occasion picker persist throughout.</div>
+        </div>
+        <div className="row">
+          <Board kicker="State 1" label="Idle (Work selected)">
+            <ScreenIdle selectedId="work"/>
+          </Board>
+          <Board kicker="State 1b" label="Idle (no selection)">
+            <ScreenIdleEmpty/>
+          </Board>
+          <Board kicker="State 2" label="Loading">
+            <ScreenLoading selectedId="work"/>
+          </Board>
+          <Board kicker="State 3" label="Results">
+            <ScreenResults selectedId="work"/>
+          </Board>
+        </div>
+      </section>
+
+      <section className="sheet">
+        <div className="sheet-head">
+          <div className="sheet-kicker">StyleSense · Outfits Tab</div>
+          <h1 className="sheet-title">Empty &amp; error states</h1>
+          <div className="sheet-sub">Header and picker stay visible; the cards area swaps for an iconographic message.</div>
+        </div>
+        <div className="row">
+          <Board kicker="Empty" label="No items in wardrobe">
+            <ScreenEmptyClosetState/>
+          </Board>
+          <Board kicker="Empty" label="No match for occasion">
+            <ScreenNoMatchState/>
+          </Board>
+          <Board kicker="Empty" label="Incomplete wardrobe">
+            <ScreenIncompleteState/>
+          </Board>
+          <Board kicker="Error" label="Pipeline failure">
+            <ScreenErrorState/>
+          </Board>
+        </div>
+      </section>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<Print/>);
+
+(async () => {
+  try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
+  await new Promise(r => setTimeout(r, 1000));
+  window.print();
+})();
+</script>
+</body>
+</html>

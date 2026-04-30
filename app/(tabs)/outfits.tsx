@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
-  View, Text, StyleSheet, Pressable, ScrollView, Animated, Image, Dimensions, Alert
+  View, Text, StyleSheet, Pressable, ScrollView, Animated, Image
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import { Ionicons } from "@expo/vector-icons";
@@ -9,7 +9,7 @@ import { useClosetStore } from "@/store/closet";
 import { useOutfitsStore } from "@/store/outfits";
 import { router } from "expo-router";
 import { getCurrentWeather, WEATHER_LABELS, WEATHER_ICONS, clearWeatherCache } from "@/lib/weather";
-import WearHistorySheet from "@/components/WearHistorySheet";
+
 import type { WeatherSnapshot } from "@/types";
 
 // ============================================================================
@@ -23,6 +23,9 @@ const TEXT = "#FFFFFF";
 const TEXT_SEC = "#888888";
 const TEXT_MUTED = "#555555";
 const ERROR = "#FF4444";
+const SUCCESS = "#7FB685";
+const SUCCESS_BG = "rgba(127,182,133,0.14)";
+const SUCCESS_BORDER = "rgba(127,182,133,0.35)";
 
 type ScreenState = "idle" | "loading" | "results" | "error" | "empty_closet" | "incomplete";
 type ViewMode = "generate" | "saved";
@@ -149,6 +152,7 @@ function OutfitResultCard({
   wornToday,
   onLogWorn,
   onOpenHistory,
+  splitWornRegen = false,
 }: {
   outfit: MockOutfit;
   index: number;
@@ -159,6 +163,7 @@ function OutfitResultCard({
   wornToday: boolean;
   onLogWorn: () => void;
   onOpenHistory: () => void;
+  splitWornRegen?: boolean;
 }) {
   const anim = useRef(new Animated.Value(0)).current;
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -191,7 +196,11 @@ function OutfitResultCard({
 
   return (
     <Pressable onPress={onOpenHistory} style={s.cardTouchable}>
-      <Animated.View style={[s.resultCard, { opacity: anim, transform: [{ translateY }] }]}>
+      <Animated.View style={[
+        s.resultCard,
+        { opacity: anim, transform: [{ translateY }] },
+        wornToday && splitWornRegen && s.resultCardWorn,
+      ]}>
         <View style={s.resultCardHeader}>
           <Text style={s.resultCardTitle}>{outfit.name}</Text>
           <View style={s.headerRight}>
@@ -234,35 +243,51 @@ function OutfitResultCard({
         <Text style={s.piecesText}>{outfit.piecesStr}</Text>
         <Text style={s.reasonText}>"{outfit.desc}"</Text>
 
-        <View style={s.cardActions}>
-          {isSavedCard && (
+        {splitWornRegen ? (
+          <View style={s.splitActions}>
+            <Pressable
+              onPress={(e) => { e.stopPropagation?.(); handleRegenerate(); }}
+              style={({ pressed }) => [s.splitBtn, { borderColor: pressed ? ACCENT : SURFACE2 }]}
+            >
+              {({ pressed }) => (
+                <Text style={[s.splitBtnText, { color: pressed ? ACCENT : TEXT_SEC }]}>↺ Regenerate</Text>
+              )}
+            </Pressable>
             <Pressable
               onPress={(e) => { e.stopPropagation?.(); onLogWorn(); }}
               disabled={wornToday}
-              style={[s.regenBtn, wornToday && s.wornBtn]}
+              style={[s.splitBtn, s.splitBtnWorn, wornToday && s.splitBtnWornLogged]}
             >
-              <Text style={[s.regenText, wornToday && { color: ACCENT }]}>
-                {wornToday ? "✓ Worn Today" : "Mark as Worn"}
+              <Text style={[s.splitBtnText, wornToday ? { color: SUCCESS } : { color: ACCENT }]}>
+                {wornToday ? "✓ Logged" : "Worn today"}
               </Text>
             </Pressable>
-          )}
-
-          {showRegenerate && (
-            <Pressable
-              onPress={(e) => { e.stopPropagation?.(); handleRegenerate(); }}
-              style={({ pressed }) => [
-                s.regenBtn,
-                { borderColor: pressed ? ACCENT : SURFACE2 }
-              ]}
-            >
-              {({ pressed }) => (
-                <Text style={[s.regenText, { color: pressed ? ACCENT : TEXT_SEC }]}>
-                  ↺ Regenerate
+          </View>
+        ) : (
+          <View style={s.cardActions}>
+            {isSavedCard && (
+              <Pressable
+                onPress={(e) => { e.stopPropagation?.(); onLogWorn(); }}
+                disabled={wornToday}
+                style={[s.regenBtn, wornToday && s.wornBtn]}
+              >
+                <Text style={[s.regenText, wornToday && { color: ACCENT }]}>
+                  {wornToday ? "✓ Worn Today" : "Mark as Worn"}
                 </Text>
-              )}
-            </Pressable>
-          )}
-        </View>
+              </Pressable>
+            )}
+            {showRegenerate && (
+              <Pressable
+                onPress={(e) => { e.stopPropagation?.(); handleRegenerate(); }}
+                style={({ pressed }) => [s.regenBtn, { borderColor: pressed ? ACCENT : SURFACE2 }]}
+              >
+                {({ pressed }) => (
+                  <Text style={[s.regenText, { color: pressed ? ACCENT : TEXT_SEC }]}>↺ Regenerate</Text>
+                )}
+              </Pressable>
+            )}
+          </View>
+        )}
       </Animated.View>
     </Pressable>
   );
@@ -282,8 +307,7 @@ export default function OutfitsScreen() {
     unsaveOutfit,
     fetchSavedOutfits,
     savedOutfits,
-    logWorn,
-    wearLogsBySavedOutfit,
+    logWornGenerated,
   } = useOutfitsStore();
 
   const [state, setState] = useState<ScreenState>("idle");
@@ -291,7 +315,10 @@ export default function OutfitsScreen() {
   const [view, setView] = useState<ViewMode>("generate");
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
   const [weatherChecked, setWeatherChecked] = useState(false);
-  const [historySheet, setHistorySheet] = useState<{ id: string; name: string } | null>(null);
+
+  const [wornGeneratedIds, setWornGeneratedIds] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     fetchSavedOutfits();
@@ -368,7 +395,6 @@ export default function OutfitsScreen() {
 
   const today = new Date();
   const dateStr = today.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-  const todayStr = today.toISOString().split("T")[0];
 
   const activeOccasionObj = OCCASIONS.find(o => o.id === occasion);
 
@@ -438,18 +464,40 @@ export default function OutfitsScreen() {
     }
   };
 
-  const handleLogWorn = async (savedOutfitId: string) => {
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2200);
+  };
+
+  const handleLogWornGenerated = async (outfit: MockOutfit) => {
+    if (wornGeneratedIds.has(outfit.id)) return;
+    setWornGeneratedIds(prev => new Set(prev).add(outfit.id));
+    showToast("Logged for today");
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     try {
-      await logWorn(savedOutfitId);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch {
-      Alert.alert("Couldn't log", "Please try again.");
+      await logWornGenerated(
+        {
+          id: outfit.sourceGeneratedId || outfit.id,
+          name: outfit.name,
+          item_ids: outfit.item_ids,
+          description: outfit.desc,
+          source_suggestion_id: outfit.source_suggestion_id,
+          savedId: outfit.savedId,
+        },
+        occasion!,
+        weather
+      );
+    } catch (err: any) {
+      console.warn("[outfits] logWornGenerated failed:", err?.message || err);
     }
   };
 
   const reset = () => {
     setState("idle");
     setOccasion(null);
+    setWornGeneratedIds(new Set());
   };
 
   // --- RENDERS ---
@@ -543,8 +591,6 @@ export default function OutfitsScreen() {
               {savedResults.map((r, i) => {
                 const so = savedOutfits.find(x => x.id === r.id);
                 const label = so ? (OCCASION_LABEL_BY_ID[so.occasion] || so.occasion) : "STYLE";
-                const logs = wearLogsBySavedOutfit[r.id] || [];
-                const wornToday = logs.some(l => l.worn_on === todayStr);
                 return (
                   <OutfitResultCard
                     key={r.id}
@@ -553,9 +599,9 @@ export default function OutfitsScreen() {
                     occasionLabel={label}
                     onToggleSave={() => handleUnsaveFromSavedView(r)}
                     showRegenerate={false}
-                    wornToday={wornToday}
-                    onLogWorn={() => handleLogWorn(r.id)}
-                    onOpenHistory={() => setHistorySheet({ id: r.id, name: r.name })}
+                    wornToday={false}
+                    onLogWorn={noop}
+                    onOpenHistory={noop}
                   />
                 );
               })}
@@ -563,102 +609,102 @@ export default function OutfitsScreen() {
           )}
         </View>
 
-        <WearHistorySheet
-          visible={historySheet !== null}
-          outfitId={historySheet?.id ?? ""}
-          outfitName={historySheet?.name ?? ""}
-          onClose={() => setHistorySheet(null)}
-        />
       </View>
     );
   }
 
   // --- GENERATE VIEW ---
+  // Header + toggle are sticky; picker tiles + cards scroll together.
   return (
     <View style={s.screen}>
+      {/* Fixed sticky header */}
       {renderHeader()}
       {renderViewToggle()}
 
-      {(state === "idle" || state === "loading" || state === "results") && (
-        <View style={s.pickerSection}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.pickerScroll}>
-            {OCCASIONS.map(occ => {
-              const isActive = occasion === occ.id;
-              return (
-                <Pressable
-                  key={occ.id}
-                  onPress={() => state === "idle" && setOccasion(occ.id)}
-                  style={[
-                    s.tile,
-                    isActive && s.tileActive,
-                    state !== "idle" && !isActive && { opacity: 0.4 }
-                  ]}
-                >
-                  <Ionicons name={occ.icon as any} size={18} color={isActive ? ACCENT : TEXT_MUTED} style={{ marginBottom: 6 }} />
-                  <Text style={[s.tileLabel, isActive && { color: ACCENT }]}>{occ.label}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-          <View style={s.descStrip}>
-            <Text style={s.descText}>
-              {activeOccasionObj ? activeOccasionObj.desc : "Select an occasion to style"}
-            </Text>
+      {/* Scrollable body — occasion picker scrolls with the cards */}
+      {(state === "idle" || state === "loading" || state === "results") ? (
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 120 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={s.pickerSection}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={s.pickerScroll}
+              keyboardShouldPersistTaps="handled"
+            >
+              {OCCASIONS.map(occ => {
+                const isActive = occasion === occ.id;
+                return (
+                  <Pressable
+                    key={occ.id}
+                    onPress={() => state === "idle" && setOccasion(occ.id)}
+                    style={[
+                      s.tile,
+                      isActive && s.tileActive,
+                      state !== "idle" && !isActive && { opacity: 0.4 }
+                    ]}
+                  >
+                    <Ionicons name={occ.icon as any} size={18} color={isActive ? ACCENT : TEXT_MUTED} style={{ marginBottom: 6 }} />
+                    <Text style={[s.tileLabel, isActive && { color: ACCENT }]}>{occ.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <View style={s.descStrip}>
+              <Text style={s.descText}>
+                {activeOccasionObj ? activeOccasionObj.desc : "Select an occasion to style"}
+              </Text>
+            </View>
           </View>
+
+          {state === "loading" && (
+            <>
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+            </>
+          )}
+
+          {state === "results" && (
+            <View style={{ paddingTop: 8 }}>
+              {results.map((r, i) => (
+                <OutfitResultCard
+                  key={r.id}
+                  outfit={r}
+                  index={i}
+                  occasionLabel={activeOccasionObj?.label || "STYLE"}
+                  onRegenerate={handleRegenerateOutfit}
+                  onToggleSave={() => occasion && handleToggleSave(occasion, r)}
+                  showRegenerate={true}
+                  wornToday={wornGeneratedIds.has(r.id)}
+                  onLogWorn={() => handleLogWornGenerated(r)}
+                  onOpenHistory={noop}
+                  splitWornRegen={true}
+                />
+              ))}
+              <Pressable onPress={reset} style={s.startOverBtn}>
+                <Text style={s.startOverText}>Start Over</Text>
+              </Pressable>
+            </View>
+          )}
+        </ScrollView>
+      ) : (
+        <View style={s.contentArea}>
+          {state === "empty_closet" && renderEmptyState(
+            "shirt-outline", "Your closet is empty", "Add some clothes to get started", "Add Item", () => router.push("/(tabs)/add")
+          )}
+          {state === "incomplete" && renderEmptyState(
+            "extension-puzzle-outline", `Incomplete wardrobe for ${activeOccasionObj?.label}`, "You're missing enough items to complete an outfit.", "Add More Items", () => router.push("/(tabs)/add")
+          )}
+          {state === "error" && renderEmptyState(
+            "alert-circle-outline", "Something went wrong", "Couldn't generate outfits. Try again.", "Try Again", reset, ERROR
+          )}
         </View>
       )}
-
-      <View style={s.contentArea}>
-        {state === "idle" && (
-          <View style={{ flex: 1 }} />
-        )}
-
-        {state === "loading" && (
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 120 }}>
-            <SkeletonCard />
-            <SkeletonCard />
-            <SkeletonCard />
-          </ScrollView>
-        )}
-
-        {state === "results" && (
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={{ paddingBottom: 120, paddingTop: 8 }}
-            showsVerticalScrollIndicator={false}
-          >
-            {results.map((r, i) => (
-              <OutfitResultCard
-                key={r.id}
-                outfit={r}
-                index={i}
-                occasionLabel={activeOccasionObj?.label || "STYLE"}
-                onRegenerate={handleRegenerateOutfit}
-                onToggleSave={() => occasion && handleToggleSave(occasion, r)}
-                showRegenerate={true}
-                wornToday={false}
-                onLogWorn={noop}
-                onOpenHistory={noop}
-              />
-            ))}
-            <Pressable onPress={reset} style={s.startOverBtn}>
-              <Text style={s.startOverText}>Start Over</Text>
-            </Pressable>
-          </ScrollView>
-        )}
-
-        {state === "empty_closet" && renderEmptyState(
-          "shirt-outline", "Your closet is empty", "Add some clothes to get started", "Add Item", () => router.push("/(tabs)/add")
-        )}
-
-        {state === "incomplete" && renderEmptyState(
-          "extension-puzzle-outline", `Incomplete wardrobe for ${activeOccasionObj?.label}`, "You're missing enough items to complete an outfit.", "Add More Items", () => router.push("/(tabs)/add")
-        )}
-
-        {state === "error" && renderEmptyState(
-          "alert-circle-outline", "Something went wrong", "Couldn't generate outfits. Try again.", "Try Again", reset, ERROR
-        )}
-      </View>
 
       {state === "idle" && (
         <View style={s.bottomFixed}>
@@ -679,6 +725,15 @@ export default function OutfitsScreen() {
           <StatusChip />
         </View>
       )}
+
+      {toast !== null && (
+        <View style={s.toastWrap} pointerEvents="none">
+          <View style={s.toast}>
+            <View style={s.toastDot} />
+            <Text style={s.toastText}>{toast}</Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -691,7 +746,7 @@ const s = StyleSheet.create({
 
   header: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingBottom: 8,
   },
   headerLabel: {
     fontFamily: "JetBrainsMono_400Regular",
@@ -751,7 +806,7 @@ const s = StyleSheet.create({
   },
   togglePillTextActive: { color: ACCENT },
 
-  pickerSection: { marginBottom: 16 },
+  pickerSection: { marginBottom: 8 },
   pickerScroll: { paddingHorizontal: 16, gap: 10 },
   tile: {
     backgroundColor: SURFACE,
@@ -862,6 +917,40 @@ const s = StyleSheet.create({
   },
   regenText: { fontFamily: "Inter_400Regular", fontSize: 12, color: TEXT_SEC },
 
+  resultCardWorn: {
+    borderWidth: 1,
+    borderColor: SUCCESS_BORDER,
+  },
+
+  splitActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 14,
+  },
+  splitBtn: {
+    flex: 1,
+    height: 40,
+    borderWidth: 1,
+    borderColor: SURFACE2,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+  },
+  splitBtnWorn: {
+    borderColor: ACCENT,
+    backgroundColor: "rgba(212,165,116,0.10)",
+  },
+  splitBtnWornLogged: {
+    borderColor: SUCCESS_BORDER,
+    backgroundColor: SUCCESS_BG,
+  },
+  splitBtnText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
+    color: TEXT_SEC,
+  },
+
   startOverBtn: { alignItems: "center", paddingVertical: 20 },
   startOverText: { fontFamily: "Inter_500Medium", fontSize: 13, color: TEXT_SEC },
 
@@ -872,4 +961,25 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: ACCENT, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 24,
   },
   emptyBtnTextOutlined: { fontFamily: "Inter_600SemiBold", fontSize: 14, color: ACCENT },
+
+  toastWrap: {
+    position: "absolute", bottom: 90, left: 0, right: 0,
+    alignItems: "center", pointerEvents: "none",
+  },
+  toast: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: SURFACE,
+    borderWidth: 1, borderColor: ACCENT,
+    borderRadius: 999,
+    paddingVertical: 10, paddingHorizontal: 16,
+    shadowColor: "#000", shadowOpacity: 0.6, shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  toastDot: {
+    width: 18, height: 18, borderRadius: 9,
+    backgroundColor: ACCENT,
+  },
+  toastText: {
+    fontFamily: "Inter_400Regular", fontSize: 13, color: TEXT, letterSpacing: -0.05,
+  },
 });

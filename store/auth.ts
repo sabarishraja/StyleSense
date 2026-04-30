@@ -16,6 +16,8 @@ interface AuthState {
   clearError: () => void;
 }
 
+let _initialized = false;
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   session: null,
@@ -24,17 +26,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   error: null,
 
   initialize: () => {
-    // Listen for auth state changes
-    supabase.auth.onAuthStateChange((_event, session) => {
-      set({
-        session,
-        user: session?.user ?? null,
-        initialized: true,
-      });
-    });
+    if (_initialized) return;
+    _initialized = true;
 
-    // Also check current session on init
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // onAuthStateChange fires immediately with the current session,
+    // so it handles both initial load and subsequent changes.
+    supabase.auth.onAuthStateChange((_event, session) => {
       set({
         session,
         user: session?.user ?? null,
@@ -77,6 +74,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
+      set({ user: null, session: null });
     } catch (err: any) {
       set({ error: err.message || "Failed to sign out" });
     } finally {

@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>StyleSense — Outfit Log + Calendar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  html, body { margin:0; padding:0; background:#0A0A0A; min-height: 100vh; font-family: 'Inter', system-ui, sans-serif; color:#F5F5F5; -webkit-font-smoothing: antialiased; }
+  *, *::before, *::after { box-sizing: border-box; }
+  .hide-scrollbar::-webkit-scrollbar { display: none; }
+  .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  button { font-family: inherit; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="frames/ios-frame.jsx"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="src/tokens.jsx"></script>
+<script type="text/babel" src="src/data.jsx"></script>
+<script type="text/babel" src="src/primitives.jsx"></script>
+<script type="text/babel" src="src/wear-data.jsx"></script>
+<script type="text/babel" src="src/screen-outfits-tab.jsx"></script>
+<script type="text/babel" src="src/screen-generate.jsx"></script>
+<script type="text/babel" src="src/screen-profile-calendar.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState: uS_App, useEffect: uE_App } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accentKey": "gold",
+  "wornButtonStyle": "split"
+}/*EDITMODE-END*/;
+
+// Wrap an iOS device with a tab bar for context.
+function PhoneFrame({ activeTab = 'generate', children }) {
+  return (
+    <IOSDevice width={390} height={844} dark={true}>
+      <div style={{display:'flex', flexDirection:'column', height: '100%', background: TOKENS.bg}}>
+        <div style={{flex: 1, overflow: 'auto', position: 'relative'}} className="hide-scrollbar">
+          {children}
+        </div>
+        <TabBar active={activeTab}/>
+      </div>
+    </IOSDevice>
+  );
+}
+
+function TabBar({ active }) {
+  const tabs = [
+    { id: 'closet',   label: 'Closet',   icon: <Icon.library/> },
+    { id: 'add',      label: 'Add',      icon: <Icon.plus/> },
+    { id: 'generate', label: 'Generate', icon: <Icon.sparkle/> },
+    { id: 'profile',  label: 'Profile',  icon: <Icon.user/> },
+  ];
+  return (
+    <div style={{
+      display:'flex', justifyContent:'space-around',
+      padding: '10px 8px 28px',
+      background: 'rgba(10,10,10,0.85)',
+      borderTop: `1px solid ${TOKENS.border}`,
+      backdropFilter: 'blur(20px)',
+    }}>
+      {tabs.map(t => (
+        <div key={t.id} style={{
+          display:'flex', flexDirection:'column', alignItems:'center', gap: 3,
+          color: t.id === active ? TOKENS.text : TOKENS.textDim,
+          fontFamily: TOKENS.mono, fontSize: 9, letterSpacing: 1, textTransform:'uppercase',
+        }}>
+          {t.icon}
+          <span>{t.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function App() {
+  const [tweaks, setTweaks] = uS_App(TWEAK_DEFAULTS);
+  const [editMode, setEditMode] = uS_App(false);
+
+  uE_App(() => {
+    const onMsg = (e) => {
+      if (!e.data || typeof e.data !== 'object') return;
+      if (e.data.type === '__activate_edit_mode') setEditMode(true);
+      if (e.data.type === '__deactivate_edit_mode') setEditMode(false);
+    };
+    window.addEventListener('message', onMsg);
+    window.parent.postMessage({type: '__edit_mode_available'}, '*');
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  const setTweak = (k, v) => {
+    setTweaks(t => ({...t, [k]: v}));
+    window.parent.postMessage({type: '__edit_mode_set_keys', edits: {[k]: v}}, '*');
+  };
+
+  const accent = ACCENTS[tweaks.accentKey] || ACCENTS.gold;
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: 'radial-gradient(ellipse at top, #121212 0%, #0A0A0A 60%)',
+    }}>
+      {/* Title strip */}
+      <div style={{
+        padding: '32px 32px 12px',
+        maxWidth: 1400, margin: '0 auto',
+      }}>
+        <div style={{
+          fontFamily: TOKENS.mono, fontSize: 10, letterSpacing: 2,
+          color: accent.solid, textTransform:'uppercase', marginBottom: 6,
+        }}>Feature · Outfit Log + Calendar</div>
+        <div style={{
+          fontFamily: TOKENS.serif, fontSize: 38, fontWeight: 400,
+          color: TOKENS.text, letterSpacing: -1.2, lineHeight: 1,
+        }}>What did I wear?</div>
+        <div style={{
+          fontFamily: TOKENS.sans, fontSize: 13, color: TOKENS.textMuted,
+          marginTop: 8, maxWidth: 620, letterSpacing: -0.05, lineHeight: 1.5,
+        }}>
+          A wardrobe diary. <em style={{color: TOKENS.text, fontStyle:'normal'}}>Worn</em> is a separate concept from <em style={{color: TOKENS.text, fontStyle:'normal'}}>Saved</em> — generated outfits can be logged without saving them, so the diary captures real life. Toggle <strong style={{color: accent.solid}}>Tweaks</strong> in the toolbar to swap accent colors and the Worn-button treatment.
+        </div>
+      </div>
+
+      <DesignCanvas>
+        <DCSection id="generate" title="Generate · Worn Today" subtitle="The new button on AI-suggested outfit cards">
+          <DCArtboard id="g-default" label="A · Resting state" width={390} height={844}>
+            <PhoneFrame activeTab="generate">
+              <GenerateScreen accent={accent} wornButtonStyle={tweaks.wornButtonStyle}/>
+            </PhoneFrame>
+          </DCArtboard>
+          <DCArtboard id="g-logged" label="B · After tap (try the button →)" width={390} height={844}>
+            <PhoneFrame activeTab="generate">
+              <GenerateScreen accent={accent} wornButtonStyle={tweaks.wornButtonStyle} initialWorn="gen-001"/>
+            </PhoneFrame>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="profile" title="Profile · Calendar" subtitle="Weekly view of what was worn">
+          <DCArtboard id="p-week" label="A · This week" width={390} height={844}>
+            <PhoneFrame activeTab="profile">
+              <ProfileCalendarScreen accent={accent} wardrobe={WARDROBE}/>
+            </PhoneFrame>
+          </DCArtboard>
+          <DCArtboard id="p-empty" label="B · First-time empty state" width={390} height={844}>
+            <PhoneFrame activeTab="profile">
+              <ProfileCalendarScreen accent={accent} wardrobe={WARDROBE} emptyState={true}/>
+            </PhoneFrame>
+          </DCArtboard>
+          <DCArtboard id="p-sheet" label="C · Day expanded (tap a day →)" width={390} height={844}>
+            <PhoneFrame activeTab="profile">
+              <ProfileCalendarScreen accent={accent} wardrobe={WARDROBE}/>
+            </PhoneFrame>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="schema" title="Schema · Migration" subtitle="Redesigned wear_logs to support both saved and generated outfits">
+          <DCArtboard id="sql" label="SQL" width={620} height={620}>
+            <SchemaCard accent={accent}/>
+          </DCArtboard>
+          <DCArtboard id="model" label="Data model" width={420} height={620}>
+            <ModelCard accent={accent}/>
+          </DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+
+      {editMode && (
+        <TweaksPanel title="Tweaks">
+          <TweakSection label="Accent">
+            <TweakRadio
+              value={tweaks.accentKey}
+              onChange={(v) => setTweak('accentKey', v)}
+              options={[
+                { value: 'gold',      label: 'Gold' },
+                { value: 'copper',    label: 'Copper' },
+                { value: 'champagne', label: 'Champagne' },
+                { value: 'bone',      label: 'Bone' },
+              ]}
+            />
+          </TweakSection>
+          <TweakSection label="Worn button treatment">
+            <TweakRadio
+              value={tweaks.wornButtonStyle}
+              onChange={(v) => setTweak('wornButtonStyle', v)}
+              options={[
+                { value: 'split',   label: 'Split pair' },
+                { value: 'primary', label: 'Primary stack' },
+              ]}
+            />
+          </TweakSection>
+        </TweaksPanel>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Schema cards
+// ─────────────────────────────────────────────────────────────
+function SchemaCard({ accent }) {
+  const sql = `-- Migration: redesign wear_logs to support both
+-- saved AND generated (ephemeral) outfits.
+-- One outfit per user per day.
+
+BEGIN;
+
+-- 1. Drop the old foreign key + column
+ALTER TABLE wear_logs
+  DROP CONSTRAINT IF EXISTS wear_logs_user_id_saved_outfit_id_worn_on_key,
+  DROP COLUMN saved_outfit_id;
+
+-- 2. Add snapshot columns
+ALTER TABLE wear_logs
+  ADD COLUMN item_ids     UUID[]  NOT NULL DEFAULT '{}',
+  ADD COLUMN occasion     TEXT,
+  ADD COLUMN outfit_name  TEXT;
+
+-- 3. Re-add per-day uniqueness (one outfit per user per day)
+ALTER TABLE wear_logs
+  ADD CONSTRAINT wear_logs_user_day_unique
+    UNIQUE (user_id, worn_on);
+
+-- 4. Index for calendar queries
+CREATE INDEX IF NOT EXISTS wear_logs_user_worn_on_idx
+  ON wear_logs (user_id, worn_on DESC);
+
+-- 5. RLS — users only touch their own rows
+ALTER TABLE wear_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY wear_logs_select_own ON wear_logs
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY wear_logs_insert_own ON wear_logs
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY wear_logs_update_own ON wear_logs
+  FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY wear_logs_delete_own ON wear_logs
+  FOR DELETE USING (auth.uid() = user_id);
+
+COMMIT;`;
+  return (
+    <div style={{
+      width: '100%', height: '100%',
+      background: TOKENS.surface,
+      border: `1px solid ${TOKENS.border}`,
+      borderRadius: TOKENS.rCard,
+      padding: 20,
+      display:'flex', flexDirection:'column', gap: 12,
+      overflow:'hidden',
+    }}>
+      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+        <div>
+          <div style={{
+            fontFamily: TOKENS.mono, fontSize: 9, letterSpacing: 1.5,
+            color: accent.solid, textTransform:'uppercase', marginBottom: 4,
+          }}>20260429_redesign_wear_logs.sql</div>
+          <div style={{
+            fontFamily: TOKENS.serif, fontSize: 22, color: TOKENS.text,
+            letterSpacing: -0.4,
+          }}>wear_logs · v2</div>
+        </div>
+        <CategoryBadge accent={accent}>Postgres · RLS</CategoryBadge>
+      </div>
+      <pre style={{
+        flex: 1, overflow:'auto',
+        background: '#0A0A0A',
+        border: `1px solid ${TOKENS.border}`,
+        borderRadius: 12,
+        padding: 14,
+        margin: 0,
+        fontFamily: TOKENS.mono, fontSize: 11, lineHeight: 1.55,
+        color: TOKENS.text, letterSpacing: 0,
+        whiteSpace: 'pre-wrap',
+      }}>{sql}</pre>
+    </div>
+  );
+}
+
+function ModelCard({ accent }) {
+  const fields = [
+    { name: 'id',          type: 'UUID', note: 'pk' },
+    { name: 'user_id',     type: 'UUID', note: 'auth' },
+    { name: 'worn_on',     type: 'DATE', note: 'unique per user' },
+    { name: 'item_ids',    type: 'UUID[]', note: 'snapshot of items' , add: true },
+    { name: 'occasion',    type: 'TEXT', note: 'optional', add: true },
+    { name: 'outfit_name', type: 'TEXT', note: 'optional', add: true },
+    { name: 'created_at',  type: 'TIMESTAMPTZ', note: '' },
+  ];
+  const removed = [
+    { name: 'saved_outfit_id', type: 'UUID FK', note: 'replaced by snapshot' },
+  ];
+  return (
+    <div style={{
+      width: '100%', height: '100%',
+      background: TOKENS.surface,
+      border: `1px solid ${TOKENS.border}`,
+      borderRadius: TOKENS.rCard,
+      padding: 20,
+      display:'flex', flexDirection:'column', gap: 14,
+    }}>
+      <div>
+        <div style={{
+          fontFamily: TOKENS.mono, fontSize: 9, letterSpacing: 1.5,
+          color: accent.solid, textTransform:'uppercase', marginBottom: 4,
+        }}>Table shape</div>
+        <div style={{
+          fontFamily: TOKENS.serif, fontSize: 22, color: TOKENS.text,
+          letterSpacing: -0.4,
+        }}>wear_logs</div>
+      </div>
+
+      <div>
+        <div style={{
+          fontFamily: TOKENS.mono, fontSize: 9, letterSpacing: 1.5,
+          color: TOKENS.textMuted, textTransform:'uppercase', marginBottom: 8,
+        }}>Columns</div>
+        <div style={{
+          background:'#0A0A0A', borderRadius: 12,
+          border: `1px solid ${TOKENS.border}`,
+          overflow:'hidden',
+        }}>
+          {fields.map((f, i) => (
+            <div key={f.name} style={{
+              display:'flex', alignItems:'center', gap: 10,
+              padding: '9px 12px',
+              borderBottom: i === fields.length - 1 ? 'none' : `1px solid ${TOKENS.borderSoft}`,
+              background: f.add ? 'rgba(127,182,133,0.06)' : 'transparent',
+            }}>
+              <span style={{
+                width: 14, fontFamily: TOKENS.mono, fontSize: 10,
+                color: f.add ? TOKENS.success : TOKENS.textDim,
+              }}>{f.add ? '+' : '·'}</span>
+              <span style={{
+                fontFamily: TOKENS.mono, fontSize: 11.5, color: TOKENS.text,
+                flex: 1,
+              }}>{f.name}</span>
+              <span style={{
+                fontFamily: TOKENS.mono, fontSize: 10.5, color: accent.solid,
+              }}>{f.type}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <div style={{
+          fontFamily: TOKENS.mono, fontSize: 9, letterSpacing: 1.5,
+          color: TOKENS.textMuted, textTransform:'uppercase', marginBottom: 8,
+        }}>Removed</div>
+        <div style={{
+          background:'#0A0A0A', borderRadius: 12,
+          border: `1px solid ${TOKENS.border}`,
+        }}>
+          {removed.map(f => (
+            <div key={f.name} style={{
+              display:'flex', alignItems:'center', gap: 10,
+              padding: '9px 12px',
+              opacity: 0.7,
+            }}>
+              <span style={{
+                width: 14, fontFamily: TOKENS.mono, fontSize: 10,
+                color: TOKENS.error,
+              }}>−</span>
+              <span style={{
+                fontFamily: TOKENS.mono, fontSize: 11.5, color: TOKENS.textMuted,
+                textDecoration: 'line-through', flex: 1,
+              }}>{f.name}</span>
+              <span style={{
+                fontFamily: TOKENS.mono, fontSize: 10.5, color: TOKENS.textDim,
+              }}>{f.type}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{
+          fontFamily: TOKENS.serif, fontStyle: 'italic',
+          fontSize: 12, color: TOKENS.textMuted,
+          marginTop: 10, lineHeight: 1.4, letterSpacing: -0.05,
+        }}>
+          Snapshotting <span style={{fontFamily: TOKENS.mono, fontSize: 10.5}}>item_ids</span> means a logged outfit survives the user later un-saving or deleting a generated outfit. The diary is independent.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

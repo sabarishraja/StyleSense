@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Onboarding — StyleSense</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  html, body { margin:0; padding:0; min-height:100vh; font-family:'Inter', system-ui, sans-serif; -webkit-font-smoothing:antialiased; background:#f0eee9; }
+  *, *::before, *::after { box-sizing: border-box; }
+  .hide-scrollbar::-webkit-scrollbar { display: none; }
+  .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  button { font-family: inherit; }
+  input { font-family: inherit; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="frames/ios-frame.jsx"></script>
+<script type="text/babel" src="src/tokens.jsx"></script>
+<script type="text/babel" src="src/data.jsx"></script>
+<script type="text/babel" src="src/primitives.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState: uS_OB, useEffect: uE_OB } = React;
+const accent = ACCENTS.gold;
+
+// ─── Reusable shell ──────────────────────────────────────────
+function InDevice({ children, dark = true }) {
+  return (
+    <IOSDevice dark={dark} width={360} height={760}>
+      <div style={{minHeight:'100%', paddingTop: 54, background: TOKENS.bg, color: TOKENS.text}}>
+        {children}
+      </div>
+    </IOSDevice>
+  );
+}
+
+// progress dots
+function Dots({ total, idx }) {
+  return (
+    <div style={{display:'flex', gap:6, alignItems:'center'}}>
+      {Array.from({length: total}).map((_,i)=>(
+        <div key={i} style={{
+          width: i===idx? 22 : 6, height: 6, borderRadius: 3,
+          background: i===idx ? accent.solid : 'rgba(255,255,255,0.18)',
+          transition:'all 220ms ease',
+        }}/>
+      ))}
+    </div>
+  );
+}
+
+// top bar with skip
+function TopBar({ step, total, onSkip }) {
+  return (
+    <div style={{
+      display:'flex', alignItems:'center', justifyContent:'space-between',
+      padding:'14px 20px 6px',
+    }}>
+      <Dots total={total} idx={step}/>
+      <button onClick={onSkip} style={{
+        background:'transparent', border:'none', cursor:'pointer',
+        color: TOKENS.textMuted, fontFamily: TOKENS.sans, fontSize: 13,
+        letterSpacing:-0.05, padding: 4,
+      }}>Skip</button>
+    </div>
+  );
+}
+
+// ─── Welcome (step 0) ─────────────────────────────────────────
+function Welcome({ onNext }) {
+  return (
+    <div style={{
+      minHeight:'100%', background: TOKENS.bg,
+      display:'flex', flexDirection:'column',
+      padding:'60px 28px 32px', position:'relative', overflow:'hidden',
+    }}>
+      {/* ambient blob */}
+      <div style={{
+        position:'absolute', top:-80, right:-80, width: 280, height: 280,
+        borderRadius:'50%', background: `radial-gradient(circle, ${accent.solid}22, transparent 70%)`,
+        filter:'blur(20px)', pointerEvents:'none',
+      }}/>
+      <div style={{flex: 1, display:'flex', flexDirection:'column', justifyContent:'center'}}>
+        <div style={{
+          fontFamily: TOKENS.mono, fontSize: 10, letterSpacing: 2,
+          color: accent.solid, textTransform:'uppercase', marginBottom: 18,
+        }}>Welcome, Alex</div>
+        <div style={{
+          fontFamily: TOKENS.serif, fontSize: 46, fontWeight: 400,
+          color: TOKENS.text, letterSpacing: -1.4, lineHeight: 0.98,
+          marginBottom: 16,
+        }}>A wardrobe that&nbsp;<em style={{color: accent.solid, fontStyle:'italic'}}>thinks</em> with you.</div>
+        <div style={{
+          fontFamily: TOKENS.sans, fontSize: 15, color: TOKENS.textMuted,
+          lineHeight: 1.55, maxWidth: 300,
+        }}>Photograph a piece, and Claude tags fabric, formality, and pairings — so getting dressed feels effortless.</div>
+      </div>
+      <div style={{display:'flex', flexDirection:'column', gap: 10}}>
+        <PrimaryButton accent={accent} onClick={onNext} icon={<Icon.arrowRight/>}>Take the tour</PrimaryButton>
+        <div style={{
+          textAlign:'center',
+          fontFamily: TOKENS.mono, fontSize: 9, letterSpacing: 1.5,
+          color: TOKENS.textDim, textTransform:'uppercase', marginTop: 4,
+        }}>3 quick screens · 20 seconds</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Tab walkthrough card (steps 1-3) ─────────────────────────
+function TabWalkthrough({ kicker, title, body, illustration, onNext, onBack, onSkip, step }) {
+  return (
+    <div style={{minHeight:'100%', background: TOKENS.bg, display:'flex', flexDirection:'column'}}>
+      <TopBar step={step} total={4} onSkip={onSkip}/>
+      <div style={{flex:1, padding:'8px 24px 0', display:'flex', flexDirection:'column'}}>
+        <div style={{flex:1, display:'flex', alignItems:'center', justifyContent:'center', minHeight: 280}}>
+          {illustration}
+        </div>
+        <div style={{paddingBottom: 12}}>
+          <div style={{
+            fontFamily: TOKENS.mono, fontSize: 10, letterSpacing: 2,
+            color: accent.solid, textTransform:'uppercase', marginBottom: 10,
+          }}>{kicker}</div>
+          <div style={{
+            fontFamily: TOKENS.serif, fontSize: 32, fontWeight: 400,
+            color: TOKENS.text, letterSpacing: -0.9, lineHeight: 1.05,
+            marginBottom: 12,
+          }}>{title}</div>
+          <div style={{
+            fontFamily: TOKENS.sans, fontSize: 14, color: TOKENS.textMuted,
+            lineHeight: 1.55,
+          }}>{body}</div>
+        </div>
+      </div>
+      <div style={{padding:'12px 20px 28px', display:'flex', alignItems:'center', gap:10}}>
+        <button onClick={onBack} style={{
+          width: 52, height: 52, borderRadius: TOKENS.rButton,
+          background:'transparent', border:`1px solid ${TOKENS.border}`,
+          color: TOKENS.textMuted, cursor:'pointer',
+          display:'flex', alignItems:'center', justifyContent:'center',
+        }}><Icon.back/></button>
+        <div style={{flex:1}}>
+          <PrimaryButton accent={accent} onClick={onNext} icon={<Icon.arrowRight/>}>Next</PrimaryButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Illustrations ────────────────────────────────────────────
+// Closet — mini grid of 4 garment tiles, with the active one ring-lit
+function ClosetIllo() {
+  const items = WARDROBE.slice(0,4);
+  return (
+    <div style={{
+      width: '100%', maxWidth: 280, position:'relative',
+      display:'grid', gridTemplateColumns:'1fr 1fr', gap: 10,
+    }}>
+      {items.map((it,i)=>(
+        <div key={it.id} style={{
+          position:'relative',
+          borderRadius: 16, overflow:'hidden',
+          border: i===0 ? `1px solid ${accent.solid}` : `1px solid ${TOKENS.border}`,
+          boxShadow: i===0 ? `0 0 0 4px ${accent.solid}22` : 'none',
+        }}>
+          <GarmentTile tone={it.tone} label={it.label} corner={0} showLabel={false}/>
+          {i===0 && (
+            <div style={{
+              position:'absolute', top:6, left:6,
+              padding:'2px 7px', borderRadius: 999,
+              background:'rgba(10,10,10,0.7)', backdropFilter:'blur(6px)',
+              fontFamily: TOKENS.mono, fontSize: 8, letterSpacing: 1,
+              color: accent.solid, textTransform:'uppercase', fontWeight: 600,
+            }}>tagged</div>
+          )}
+        </div>
+      ))}
+      {/* floating count chip */}
+      <div style={{
+        position:'absolute', bottom:-14, right:-6,
+        background: TOKENS.surface, border:`1px solid ${TOKENS.border}`,
+        borderRadius: 999, padding:'6px 12px',
+        fontFamily: TOKENS.mono, fontSize: 10, letterSpacing: 1.2,
+        color: TOKENS.text, textTransform:'uppercase',
+        boxShadow:'0 8px 24px rgba(0,0,0,0.5)',
+      }}>12 pieces</div>
+    </div>
+  );
+}
+
+// Outfits — three vertical strips representing top/bottom/shoes, joined by a sparkle
+function OutfitsIllo() {
+  const a = WARDROBE[1], b = WARDROBE[2], c = WARDROBE[3];
+  return (
+    <div style={{position:'relative', width:'100%', maxWidth: 280, height: 240}}>
+      <div style={{display:'flex', gap: 10, alignItems:'flex-start', justifyContent:'center'}}>
+        {[a,b,c].map((it,i)=>(
+          <div key={it.id} style={{
+            width: 76, height: 220,
+            borderRadius: 14, overflow:'hidden',
+            border:`1px solid ${TOKENS.border}`,
+            transform: `translateY(${i===1?12:0}px) rotate(${i===0?-3:i===2?3:0}deg)`,
+          }}>
+            <div style={{height: '100%'}}>
+              <GarmentTile tone={it.tone} label={it.label} corner={0} showLabel={false} style={{aspectRatio:'auto', height:'100%'}}/>
+            </div>
+          </div>
+        ))}
+      </div>
+      {/* center sparkle */}
+      <div style={{
+        position:'absolute', left:'50%', top:'50%', transform:'translate(-50%,-50%)',
+        width: 56, height: 56, borderRadius:'50%',
+        background: TOKENS.bg, border:`1px solid ${accent.solid}`,
+        display:'flex', alignItems:'center', justifyContent:'center',
+        color: accent.solid,
+        boxShadow:`0 0 24px ${accent.solid}55`,
+      }}>
+        <Icon.sparkle style={{width:24, height:24}}/>
+      </div>
+      {/* prompt chip */}
+      <div style={{
+        position:'absolute', left:'50%', bottom: -12, transform:'translateX(-50%)',
+        background: TOKENS.surface, border:`1px solid ${TOKENS.border}`,
+        borderRadius: 999, padding:'7px 14px',
+        fontFamily: TOKENS.sans, fontSize: 12, color: TOKENS.text,
+        letterSpacing: -0.05,
+        boxShadow:'0 8px 24px rgba(0,0,0,0.5)',
+      }}>"Dinner, smart-casual"</div>
+    </div>
+  );
+}
+
+// Profile — soft avatar disc + a few stat pills
+function ProfileIllo() {
+  return (
+    <div style={{
+      width:'100%', maxWidth: 280, display:'flex', flexDirection:'column', alignItems:'center', gap: 16,
+    }}>
+      <div style={{
+        width: 110, height: 110, borderRadius:'50%',
+        background: `radial-gradient(circle at 30% 30%, ${accent.solid}55, ${accent.solid}11 70%)`,
+        border: `1px solid ${accent.solid}55`,
+        display:'flex', alignItems:'center', justifyContent:'center',
+        fontFamily: TOKENS.serif, fontSize: 42, color: TOKENS.text, fontWeight: 400,
+        letterSpacing:-1,
+      }}>A</div>
+      <div style={{
+        fontFamily: TOKENS.serif, fontSize: 18, color: TOKENS.text, letterSpacing:-0.3,
+      }}>Alex Mehta</div>
+      <div style={{display:'flex', gap: 8, flexWrap:'wrap', justifyContent:'center'}}>
+        {[
+          {k:'Style', v:'Editorial'},
+          {k:'Climate', v:'Temperate'},
+          {k:'Notes', v:'Avoids beige'},
+        ].map(p=>(
+          <div key={p.k} style={{
+            background: TOKENS.surface, border:`1px solid ${TOKENS.border}`,
+            borderRadius: 999, padding:'6px 12px',
+            display:'inline-flex', alignItems:'center', gap: 6,
+          }}>
+            <span style={{
+              fontFamily: TOKENS.mono, fontSize: 9, letterSpacing: 1,
+              color: TOKENS.textDim, textTransform:'uppercase',
+            }}>{p.k}</span>
+            <span style={{
+              fontFamily: TOKENS.sans, fontSize: 12, color: TOKENS.text,
+              letterSpacing:-0.05,
+            }}>{p.v}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── First-upload prompt (step 4) ─────────────────────────────
+function FirstUpload({ onPhoto, onLibrary, onLater, onBack }) {
+  return (
+    <div style={{minHeight:'100%', background: TOKENS.bg, display:'flex', flexDirection:'column'}}>
+      <TopBar step={4} total={4} onSkip={onLater}/>
+      <div style={{flex:1, padding:'10px 24px 0', display:'flex', flexDirection:'column', justifyContent:'space-between'}}>
+        <div style={{flex:1, display:'flex', flexDirection:'column', justifyContent:'center'}}>
+          <div style={{
+            fontFamily: TOKENS.mono, fontSize: 10, letterSpacing: 2,
+            color: accent.solid, textTransform:'uppercase', marginBottom: 14,
+          }}>Last step</div>
+          <div style={{
+            fontFamily: TOKENS.serif, fontSize: 36, fontWeight: 400,
+            color: TOKENS.text, letterSpacing: -1, lineHeight: 1.02,
+            marginBottom: 14,
+          }}>Add your <em style={{color: accent.solid, fontStyle:'italic'}}>first piece</em>.</div>
+          <div style={{
+            fontFamily: TOKENS.sans, fontSize: 14, color: TOKENS.textMuted,
+            lineHeight: 1.55, marginBottom: 24, maxWidth: 290,
+          }}>One photo is enough to start. Claude will tag it in seconds — fabric, color, formality, season.</div>
+
+          {/* ghost frame illustration */}
+          <div style={{
+            width:'100%', aspectRatio:'5/3', borderRadius: 22,
+            border:`1.5px dashed ${TOKENS.border}`,
+            background:`linear-gradient(180deg, ${TOKENS.surface} 0%, ${TOKENS.bg} 100%)`,
+            display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap: 10,
+            color: TOKENS.textDim,
+          }}>
+            <div style={{
+              width: 56, height: 56, borderRadius: 16,
+              background: accent.soft, color: accent.solid,
+              display:'flex', alignItems:'center', justifyContent:'center',
+            }}><Icon.camera style={{width:28, height:28}}/></div>
+            <div style={{
+              fontFamily: TOKENS.mono, fontSize: 9, letterSpacing: 1.5,
+              color: TOKENS.textDim, textTransform:'uppercase',
+            }}>Plain bg · good light · one piece</div>
+          </div>
+        </div>
+
+        <div style={{padding:'20px 0 28px', display:'flex', flexDirection:'column', gap: 10}}>
+          <PrimaryButton accent={accent} onClick={onPhoto} icon={<Icon.camera/>}>Take Photo</PrimaryButton>
+          <PrimaryButton accent={accent} variant="ghost" onClick={onLibrary} icon={<Icon.library/>}>Choose from Library</PrimaryButton>
+          <button onClick={onLater} style={{
+            background:'transparent', border:'none', cursor:'pointer',
+            color: TOKENS.textMuted, fontFamily: TOKENS.sans, fontSize: 13,
+            letterSpacing:-0.05, padding: 8, marginTop: 2,
+          }}>I'll do this later</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Live flow (interactive, in its own device) ───────────────
+function LiveFlow() {
+  const [step, setStep] = uS_OB(0);
+  const next = () => setStep(s => Math.min(4, s+1));
+  const back = () => setStep(s => Math.max(0, s-1));
+  const skip = () => setStep(4);
+  const restart = () => setStep(0);
+
+  if (step === 0) return <Welcome onNext={next}/>;
+  if (step === 1) return <TabWalkthrough
+    step={1}
+    kicker="01 · Closet"
+    title="Your wardrobe, photographed."
+    body="Snap each piece once. Claude tags fabric, color, formality and seasons so you can find anything in two taps."
+    illustration={<ClosetIllo/>}
+    onNext={next} onBack={back} onSkip={skip}/>;
+  if (step === 2) return <TabWalkthrough
+    step={2}
+    kicker="02 · Outfits"
+    title="Outfits that fit the moment."
+    body="Tell Claude where you're going. It pulls from what you actually own — never recommends what isn't in your closet."
+    illustration={<OutfitsIllo/>}
+    onNext={next} onBack={back} onSkip={skip}/>;
+  if (step === 3) return <TabWalkthrough
+    step={3}
+    kicker="03 · Profile"
+    title="The more it knows, the better it gets."
+    body="Set your style, climate and any rules to live by. Every suggestion gets sharper from here."
+    illustration={<ProfileIllo/>}
+    onNext={next} onBack={back} onSkip={skip}/>;
+  return <FirstUpload
+    onPhoto={restart} onLibrary={restart} onLater={restart} onBack={back}/>;
+}
+
+// ─── Canvas ───────────────────────────────────────────────────
+function App() {
+  return (
+    <DesignCanvas>
+      <DCSection id="flow" title="Onboarding flow" subtitle="5 screens shown once after signup. Welcome → 3 tab walkthroughs → first-upload prompt.">
+        <DCArtboard id="ob-welcome" label="00 · Welcome" width={360} height={760}>
+          <InDevice><Welcome onNext={()=>{}}/></InDevice>
+        </DCArtboard>
+        <DCArtboard id="ob-closet" label="01 · Closet" width={360} height={760}>
+          <InDevice><TabWalkthrough step={1}
+            kicker="01 · Closet"
+            title="Your wardrobe, photographed."
+            body="Snap each piece once. Claude tags fabric, color, formality and seasons so you can find anything in two taps."
+            illustration={<ClosetIllo/>}
+            onNext={()=>{}} onBack={()=>{}} onSkip={()=>{}}/></InDevice>
+        </DCArtboard>
+        <DCArtboard id="ob-outfits" label="02 · Outfits" width={360} height={760}>
+          <InDevice><TabWalkthrough step={2}
+            kicker="02 · Outfits"
+            title="Outfits that fit the moment."
+            body="Tell Claude where you're going. It pulls from what you actually own — never recommends what isn't in your closet."
+            illustration={<OutfitsIllo/>}
+            onNext={()=>{}} onBack={()=>{}} onSkip={()=>{}}/></InDevice>
+        </DCArtboard>
+        <DCArtboard id="ob-profile" label="03 · Profile" width={360} height={760}>
+          <InDevice><TabWalkthrough step={3}
+            kicker="03 · Profile"
+            title="The more it knows, the better it gets."
+            body="Set your style, climate and any rules to live by. Every suggestion gets sharper from here."
+            illustration={<ProfileIllo/>}
+            onNext={()=>{}} onBack={()=>{}} onSkip={()=>{}}/></InDevice>
+        </DCArtboard>
+        <DCArtboard id="ob-upload" label="04 · First upload" width={360} height={760}>
+          <InDevice><FirstUpload onPhoto={()=>{}} onLibrary={()=>{}} onLater={()=>{}} onBack={()=>{}}/></InDevice>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="live" title="Live, clickable" subtitle="Tap Next / Skip / Back to walk through.">
+        <DCArtboard id="ob-live" label="Interactive" width={360} height={760}>
+          <InDevice><LiveFlow/></InDevice>
+        </DCArtboard>
+      </DCSection>
+
+      <DCPostIt top={60} right={80} rotate={-3} width={210}>
+        Shown once, after signup. Skip jumps straight to first-upload. "Later" lands them on an empty Closet.
+      </DCPostIt>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

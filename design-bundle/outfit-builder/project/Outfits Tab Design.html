@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Outfits Tab — Phase 1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  html, body { margin:0; padding:0; min-height:100vh; font-family:'Inter', system-ui, sans-serif; -webkit-font-smoothing:antialiased; }
+  *, *::before, *::after { box-sizing: border-box; }
+  .hide-scrollbar::-webkit-scrollbar { display: none; }
+  .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  button { font-family: inherit; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="frames/ios-frame.jsx"></script>
+<script type="text/babel" src="src/tokens.jsx"></script>
+<script type="text/babel" src="src/data.jsx"></script>
+<script type="text/babel" src="src/primitives.jsx"></script>
+<script type="text/babel" src="src/screen-outfits-tab.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+function InDevice({ children }) {
+  return (
+    <IOSDevice dark={true} width={360} height={760}>
+      <div style={{minHeight:'100%', paddingTop: 54, background: '#0A0A0A'}}>
+        {children}
+      </div>
+    </IOSDevice>
+  );
+}
+
+function Canvas() {
+  return (
+    <DesignCanvas>
+      <DCSection id="primary" title="Three primary states" subtitle="Idle → Loading → Results.">
+        <DCArtboard id="idle" label="1 · Idle (Work selected)" width={360} height={760}>
+          <InDevice><ScreenIdle selectedId="work"/></InDevice>
+        </DCArtboard>
+        <DCArtboard id="idle-empty" label="1b · Idle (no selection)" width={360} height={760}>
+          <InDevice><ScreenIdleEmpty/></InDevice>
+        </DCArtboard>
+        <DCArtboard id="loading" label="2 · Loading" width={360} height={760}>
+          <InDevice><ScreenLoading selectedId="work"/></InDevice>
+        </DCArtboard>
+        <DCArtboard id="results" label="3 · Results" width={360} height={760}>
+          <InDevice><ScreenResults selectedId="work"/></InDevice>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="empty" title="Empty & error states" subtitle="Header + occasion picker stay; cards area swaps.">
+        <DCArtboard id="empty-closet" label="Empty closet" width={360} height={760}>
+          <InDevice><ScreenEmptyClosetState/></InDevice>
+        </DCArtboard>
+        <DCArtboard id="no-match" label="No match for occasion" width={360} height={760}>
+          <InDevice><ScreenNoMatchState/></InDevice>
+        </DCArtboard>
+        <DCArtboard id="incomplete" label="Incomplete wardrobe" width={360} height={760}>
+          <InDevice><ScreenIncompleteState/></InDevice>
+        </DCArtboard>
+        <DCArtboard id="error" label="Error" width={360} height={760}>
+          <InDevice><ScreenErrorState/></InDevice>
+        </DCArtboard>
+      </DCSection>
+
+      <DCPostIt top={60} right={80} rotate={-3} width={210}>
+        Click any artboard label to focus it fullscreen. Loading state cycles its three status messages live.
+      </DCPostIt>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<Canvas/>);
+</script>
+</body>
+</html>

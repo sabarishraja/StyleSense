@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Add Item — Reference (print)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  html, body { margin:0; padding:0; font-family:'Inter', system-ui, sans-serif; -webkit-font-smoothing:antialiased; background:#f0eee9; }
+  *, *::before, *::after { box-sizing: border-box; }
+  .hide-scrollbar::-webkit-scrollbar { display: none; }
+  .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  button { font-family: inherit; }
+  input { font-family: inherit; }
+  .page { max-width: 1100px; margin: 0 auto; padding: 48px 32px 48px; }
+  .page-head { margin-bottom: 36px; }
+  .page-title { font-family: 'Fraunces', serif; font-size: 36px; letter-spacing: -1px; color: #2a251f; margin: 0 0 10px; font-weight: 400; }
+  .page-sub { font-family: 'Inter', sans-serif; font-size: 14px; color: rgba(40,30,20,0.6); max-width: 520px; line-height: 1.5; }
+  .row { display: flex; gap: 40px; flex-wrap: wrap; align-items: flex-start; justify-content: center; }
+  .board { display: flex; flex-direction: column; break-inside: avoid; page-break-inside: avoid; }
+  .board-labelrow { display:flex; align-items:baseline; gap:10px; margin: 0 4px 10px; }
+  .board-kicker { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 1.5px; color: #c96442; text-transform: uppercase; font-weight:600; }
+  .board-label { font-family: 'Inter', sans-serif; font-size: 14px; color: #2a251f; font-weight: 500; }
+  .board-sub { font-family: 'Inter', sans-serif; font-size: 11px; color: rgba(40,30,20,0.55); margin: 2px 4px 12px; max-width: 360px; }
+  .frame-shell { box-shadow: 0 2px 6px rgba(0,0,0,.08), 0 16px 32px rgba(0,0,0,.12); border-radius: 48px; }
+
+  @page { size: landscape; margin: 0.4cm; }
+  @media print {
+    html, body { background: #f0eee9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    *, *::before, *::after { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    .page { padding: 12px 16px; max-width: none; }
+    .page-head { margin-bottom: 18px; }
+    .page-title { font-size: 24px; margin-bottom: 4px; }
+    .page-sub { font-size: 11px; }
+    .row { gap: 32px; }
+    .frame-shell { box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 6px 14px rgba(0,0,0,.10); }
+    button { cursor: default !important; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="page-head">
+    <h1 class="page-title">Add Item — reference screens</h1>
+    <div class="page-sub">Two screens pulled from the full exploration, for handoff. Everything else (classic capture, alt flows) is omitted on purpose.</div>
+  </div>
+  <div id="root"></div>
+</div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="frames/ios-frame.jsx"></script>
+<script type="text/babel" src="src/tokens.jsx"></script>
+<script type="text/babel" src="src/data.jsx"></script>
+<script type="text/babel" src="src/primitives.jsx"></script>
+<script type="text/babel" src="src/screen-add.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const noop = () => {};
+
+function InDevice({ children }) {
+  return (
+    <div className="frame-shell">
+      <IOSDevice dark={true} width={360} height={760}>
+        <div style={{minHeight:'100%', paddingTop: 54, background: TOKENS.bg}}>
+          {children}
+        </div>
+      </IOSDevice>
+    </div>
+  );
+}
+
+function SimpleCapture({ accent }) {
+  return (
+    <div style={{minHeight:'100%', background: TOKENS.bg, display:'flex', flexDirection:'column'}}>
+      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 16px 8px'}}>
+        <button style={{width:36,height:36,borderRadius:12,background:TOKENS.surface,border:`1px solid ${TOKENS.border}`,color:TOKENS.textMuted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <Icon.close style={{width:16,height:16}}/>
+        </button>
+        <div style={{fontFamily:TOKENS.mono,fontSize:10,letterSpacing:1.5,color:TOKENS.textDim,textTransform:'uppercase'}}>New Item</div>
+        <div style={{width:36}}/>
+      </div>
+      <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',textAlign:'center',padding:'20px 24px'}}>
+        <div style={{width:96,height:96,borderRadius:28,background:accent.soft,border:`1px solid ${accent.solid}40`,display:'flex',alignItems:'center',justifyContent:'center',color:accent.solid,marginBottom:28}}>
+          <Icon.camera style={{width:44,height:44}}/>
+        </div>
+        <div style={{fontFamily:TOKENS.serif,fontSize:28,fontWeight:400,color:TOKENS.text,letterSpacing:-0.7,lineHeight:1.1,marginBottom:10,maxWidth:280}}>Show Claude the garment.</div>
+        <div style={{fontFamily:TOKENS.sans,fontSize:13,color:TOKENS.textMuted,maxWidth:260,lineHeight:1.5}}>Plain background, good light. One piece at a time.</div>
+      </div>
+      <div style={{padding:'0 20px 28px',display:'flex',flexDirection:'column',gap:10}}>
+        <PrimaryButton accent={accent} icon={<Icon.camera/>}>Take Photo</PrimaryButton>
+        <PrimaryButton accent={accent} variant="ghost" icon={<Icon.library/>}>Choose from Library</PrimaryButton>
+      </div>
+    </div>
+  );
+}
+
+function Reference() {
+  return (
+    <div className="row">
+      <div className="board">
+        <div className="board-labelrow">
+          <span className="board-kicker">Simple flow</span>
+          <span className="board-label">Capture</span>
+        </div>
+        <div className="board-sub">Entry screen. Two tap targets — camera or library.</div>
+        <InDevice><SimpleCapture accent={ACCENTS.gold}/></InDevice>
+      </div>
+      <div className="board">
+        <div className="board-labelrow">
+          <span className="board-kicker">Classic 3-step</span>
+          <span className="board-label">Analyzing</span>
+        </div>
+        <div className="board-sub">Transition state. Scan line, pulsing status chip, blurred preview.</div>
+        <InDevice><StepAnalyzing accent={ACCENTS.gold} animStyle="scan" onComplete={noop}/></InDevice>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<Reference/>);
+
+// Auto-print: wait for fonts + render, then print.
+(async () => {
+  try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
+  await new Promise(r => setTimeout(r, 800));
+  window.print();
+})();
+</script>
+</body>
+</html>

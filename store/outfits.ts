@@ -12,6 +12,12 @@ export interface GeneratedOutfit {
   savedId: string | null;              // saved_outfits row id if favorited
 }
 
+export interface WearLogWithOutfit extends WearLog {
+  outfit_name: string | null;
+  occasion: string | null;
+  item_ids: string[];
+}
+
 interface OutfitsState {
   outfitsByOccasion: Record<string, GeneratedOutfit[]>;
   weatherKeyByOccasion: Record<string, string>;
@@ -21,6 +27,8 @@ interface OutfitsState {
   error: string | null;
   wearLogsBySavedOutfit: Record<string, WearLog[]>;
   wearLogsLoading: boolean;
+  allWearLogs: WearLogWithOutfit[];
+  allWearLogsByDate: Record<string, WearLogWithOutfit[]>;
 
   generateOutfits: (
     occasion: string,
@@ -36,8 +44,10 @@ interface OutfitsState {
   unsaveOutfit: (occasion: string, savedId: string) => Promise<void>;
   fetchSavedOutfits: () => Promise<void>;
   logWorn: (savedOutfitId: string) => Promise<void>;
+  logWornGenerated: (outfit: GeneratedOutfit, occasion: string, weather?: WeatherSnapshot | null) => Promise<void>;
   unlogWorn: (logId: string, savedOutfitId: string) => Promise<void>;
   fetchWearLogs: (savedOutfitId: string) => Promise<void>;
+  fetchAllWearLogs: () => Promise<void>;
 }
 
 async function getUserId(): Promise<string> {
@@ -63,6 +73,8 @@ export const useOutfitsStore = create<OutfitsState>((set, get) => ({
   error: null,
   wearLogsBySavedOutfit: {},
   wearLogsLoading: false,
+  allWearLogs: [],
+  allWearLogsByDate: {},
 
   generateOutfits: async (occasion, availableItems, weather) => {
     const requestKey = weatherKey(weather);
@@ -284,6 +296,43 @@ export const useOutfitsStore = create<OutfitsState>((set, get) => ({
       throw err;
     } finally {
       set({ wearLogsLoading: false });
+    }
+  },
+
+  logWornGenerated: async (_outfit, _occasion, _weather) => {
+    // Intentionally local-only: "Worn today" on a generated card is a diary
+    // signal, not a save action. The calendar only shows wear logs that have
+    // an explicit saved_outfit_id (from the Saved tab or profile CTA).
+  },
+
+  fetchAllWearLogs: async () => {
+    try {
+      const { data, error } = await supabase
+        .from("wear_logs")
+        .select("*, saved_outfits(name, occasion, item_ids)")
+        .order("worn_on", { ascending: false });
+
+      if (error) throw error;
+
+      const logs: WearLogWithOutfit[] = (data || []).map((row: any) => ({
+        id: row.id,
+        user_id: row.user_id,
+        saved_outfit_id: row.saved_outfit_id,
+        worn_on: row.worn_on,
+        outfit_name: row.saved_outfits?.name ?? null,
+        occasion: row.saved_outfits?.occasion ?? null,
+        item_ids: row.saved_outfits?.item_ids ?? [],
+      }));
+
+      const byDate: Record<string, WearLogWithOutfit[]> = {};
+      for (const log of logs) {
+        if (!byDate[log.worn_on]) byDate[log.worn_on] = [];
+        byDate[log.worn_on].push(log);
+      }
+
+      set({ allWearLogs: logs, allWearLogsByDate: byDate });
+    } catch (err: any) {
+      console.warn("[outfits] fetchAllWearLogs failed:", err?.message || err);
     }
   },
 }));

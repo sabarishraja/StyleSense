@@ -4,6 +4,7 @@ import { useAuthStore } from "@/store/auth";
 import { useClosetStore } from "@/store/closet";
 import { useOutfitsStore } from "@/store/outfits";
 import Constants from "expo-constants";
+import WearCalendar from "@/components/WearCalendar";
 
 const ACCENT = "#D4A574";
 
@@ -76,6 +77,9 @@ export default function ProfileScreen() {
           </View>
         ))}
       </View>
+
+      {/* Wear Calendar */}
+      <WearCalendar />
 
       {/* About */}
       <SectionLabel>About</SectionLabel>

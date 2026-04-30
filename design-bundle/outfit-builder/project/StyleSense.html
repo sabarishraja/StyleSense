@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>StyleSense — iOS + Android</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  html, body { margin:0; padding:0; background:#0A0A0A; min-height: 100vh; font-family: 'Inter', system-ui, sans-serif; color:#F5F5F5; -webkit-font-smoothing: antialiased; }
+  *, *::before, *::after { box-sizing: border-box; }
+  .hide-scrollbar::-webkit-scrollbar { display: none; }
+  .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  button { font-family: inherit; }
+  input { font-family: inherit; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="frames/ios-frame.jsx"></script>
+<script type="text/babel" src="frames/android-frame.jsx"></script>
+<script type="text/babel" src="src/tokens.jsx"></script>
+<script type="text/babel" src="src/data.jsx"></script>
+<script type="text/babel" src="src/primitives.jsx"></script>
+<script type="text/babel" src="src/screen-login.jsx"></script>
+<script type="text/babel" src="src/screen-closet.jsx"></script>
+<script type="text/babel" src="src/screen-add.jsx"></script>
+<script type="text/babel" src="src/screen-add-simple.jsx"></script>
+<script type="text/babel" src="src/screen-outfits.jsx"></script>
+<script type="text/babel" src="src/screen-profile.jsx"></script>
+<script type="text/babel" src="src/app.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState: uS_Main, useEffect: uE_Main } = React;
+
+// Persisted tweakable defaults
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accentKey": "gold",
+  "cardVariant": "photo-first",
+  "gridDensity": "2",
+  "analyzing": "scan",
+  "addFlow": "simple",
+  "populated": true,
+  "showLogin": false
+}/*EDITMODE-END*/;
+
+function DualStage() {
+  const [tweaks, setTweaks] = uS_Main(TWEAK_DEFAULTS);
+  const [editMode, setEditMode] = uS_Main(false);
+
+  uE_Main(() => {
+    const onMsg = (e) => {
+      if (!e.data || typeof e.data !== 'object') return;
+      if (e.data.type === '__activate_edit_mode') setEditMode(true);
+      if (e.data.type === '__deactivate_edit_mode') setEditMode(false);
+    };
+    window.addEventListener('message', onMsg);
+    window.parent.postMessage({type: '__edit_mode_available'}, '*');
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  const updateTweak = (key, val) => {
+    setTweaks(t => ({...t, [key]: val}));
+    window.parent.postMessage({
+      type: '__edit_mode_set_keys',
+      edits: {[key]: val},
+    }, '*');
+  };
+
+  const accent = ACCENTS[tweaks.accentKey] || ACCENTS.gold;
+
+  return (
+    <div style={{
+      minHeight:'100vh',
+      background: `radial-gradient(ellipse at top, #121212 0%, #0A0A0A 60%)`,
+      padding: '40px 24px 80px',
+    }}>
+      <div style={{
+        maxWidth: 1200, margin: '0 auto 36px',
+        display:'flex', alignItems:'flex-end', justifyContent:'space-between', gap: 20, flexWrap:'wrap',
+      }}>
+        <div>
+          <div style={{
+            fontFamily: TOKENS.mono, fontSize: 10, letterSpacing: 2,
+            color: accent.solid, textTransform:'uppercase', marginBottom: 6,
+          }}>Prototype · v1</div>
+          <div style={{
+            fontFamily: TOKENS.serif, fontSize: 44, fontWeight: 400,
+            color: TOKENS.text, letterSpacing: -1.4, lineHeight: 1,
+          }}>StyleSense</div>
+          <div style={{
+            fontFamily: TOKENS.sans, fontSize: 14, color: TOKENS.textMuted,
+            marginTop: 8, maxWidth: 520, letterSpacing:-0.05,
+          }}>Fully interactive — tap tabs, filter the closet, run the add-item flow. Toggle Tweaks in the toolbar to cycle card styles, accents, grid density, the analyzing animation, and the Add-item flow.</div>
+        </div>
+      </div>
+
+      <div style={{
+        maxWidth: 1200, margin: '0 auto',
+        display:'flex', gap: 60, justifyContent:'center', alignItems:'flex-start',
+        flexWrap:'wrap',
+      }}>
+        <DeviceColumn label="iOS 17" platform="ios" tweaks={tweaks} accent={accent}/>
+        <DeviceColumn label="Android 14" platform="android" tweaks={tweaks} accent={accent}/>
+      </div>
+
+      {editMode && <TweaksPanel tweaks={tweaks} set={updateTweak} accent={accent}/>}
+    </div>
+  );
+}
+
+function DeviceColumn({ label, platform, tweaks, accent }) {
+  const Device = platform === 'ios' ? IOSDevice : AndroidDevice;
+  return (
+    <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap: 16}}>
+      <div style={{
+        fontFamily: TOKENS.mono, fontSize: 10, letterSpacing: 2,
+        color: TOKENS.textDim, textTransform:'uppercase',
+      }}>{label}</div>
+      <Device dark={true} width={platform === 'ios' ? 390 : 402} height={platform === 'ios' ? 840 : 840}>
+        <StyleSenseApp platform={platform} tweaks={tweaks} accent={accent}/>
+      </Device>
+    </div>
+  );
+}
+
+function TweaksPanel({ tweaks, set, accent }) {
+  return (
+    <div style={{
+      position: 'fixed', right: 20, bottom: 20, width: 280, zIndex: 1000,
+      background: 'rgba(18,18,18,0.95)',
+      backdropFilter: 'blur(20px)',
+      WebkitBackdropFilter: 'blur(20px)',
+      border: `1px solid ${TOKENS.border}`,
+      borderRadius: 18,
+      padding: 18,
+      boxShadow: '0 30px 80px rgba(0,0,0,0.6)',
+      fontFamily: TOKENS.sans,
+    }}>
+      <div style={{
+        fontFamily: TOKENS.mono, fontSize: 10, letterSpacing: 2,
+        color: accent.solid, textTransform:'uppercase', marginBottom: 14,
+      }}>Tweaks</div>
+
+      <TweakGroup label="Accent">
+        <SwatchRow
+          options={Object.entries(ACCENTS).map(([k, v]) => ({ key: k, color: v.solid, label: v.label }))}
+          value={tweaks.accentKey}
+          onChange={v => set('accentKey', v)}
+        />
+      </TweakGroup>
+
+      <TweakGroup label="Add flow">
+        <SegmentRow
+          options={[{k:'simple', l:'Simple'}, {k:'classic', l:'3-step'}]}
+          value={tweaks.addFlow} onChange={v=>set('addFlow', v)} accent={accent}
+        />
+      </TweakGroup>
+
+      <TweakGroup label="Card style">
+        <SegmentRow
+          options={[{k:'photo-first', l:'Photo'}, {k:'info-first', l:'Info'}, {k:'minimal', l:'Minimal'}]}
+          value={tweaks.cardVariant} onChange={v=>set('cardVariant', v)} accent={accent}
+        />
+      </TweakGroup>
+
+      <TweakGroup label="Grid density">
+        <SegmentRow
+          options={[{k:'2', l:'2-col'}, {k:'3', l:'3-col'}, {k:'stagger', l:'Stagger'}]}
+          value={tweaks.gridDensity} onChange={v=>set('gridDensity', v)} accent={accent}
+        />
+      </TweakGroup>
+
+      <TweakGroup label="Analyzing anim">
+        <SegmentRow
+          options={[{k:'scan', l:'Scan'}, {k:'checklist', l:'Shimmer+list'}, {k:'minimal', l:'Minimal'}]}
+          value={tweaks.analyzing} onChange={v=>set('analyzing', v)} accent={accent}
+        />
+      </TweakGroup>
+
+      <TweakGroup label="Closet">
+        <SegmentRow
+          options={[{k:true, l:'Populated'}, {k:false, l:'Empty'}]}
+          value={tweaks.populated} onChange={v=>set('populated', v)} accent={accent}
+        />
+      </TweakGroup>
+    </div>
+  );
+}
+
+function TweakGroup({ label, children }) {
+  return (
+    <div style={{marginBottom: 14}}>
+      <div style={{
+        fontFamily: TOKENS.mono, fontSize: 9, letterSpacing: 1.5,
+        color: TOKENS.textMuted, textTransform:'uppercase', marginBottom: 8,
+      }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function SegmentRow({ options, value, onChange, accent }) {
+  return (
+    <div style={{
+      display:'flex', gap: 4, padding: 3,
+      background: TOKENS.surface, borderRadius: 10,
+      border:`1px solid ${TOKENS.border}`,
+    }}>
+      {options.map(o => {
+        const active = value === o.k;
+        return (
+          <button key={String(o.k)} onClick={()=>onChange(o.k)} style={{
+            flex: 1, height: 28, borderRadius: 7,
+            background: active ? accent.solid : 'transparent',
+            color: active ? accent.ink : TOKENS.textMuted,
+            border:'none', cursor:'pointer',
+            fontSize: 11, fontWeight: active ? 600 : 500, letterSpacing:-0.05,
+          }}>{o.l}</button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SwatchRow({ options, value, onChange }) {
+  return (
+    <div style={{display:'flex', gap: 8}}>
+      {options.map(o => {
+        const active = value === o.key;
+        return (
+          <button key={o.key} onClick={()=>onChange(o.key)} title={o.label} style={{
+            flex: 1, height: 32,
+            borderRadius: 8,
+            background: o.color,
+            border: active ? '2px solid #F5F5F5' : `1px solid ${TOKENS.border}`,
+            cursor:'pointer',
+            boxShadow: active ? '0 0 0 1px #0A0A0A' : 'none',
+          }}/>
+        );
+      })}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<DualStage/>);
+</script>
+</body>
+</html>
